@@ -4,13 +4,14 @@ import { relations } from 'drizzle-orm';
 // 1. Users & Authentication
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
-  uid: text('uid').notNull().unique(), // Firebase Auth UID or system user ID
+  uid: text('uid').notNull().unique(), // System user UID
   email: text('email').notNull(),
+  password: text('password'), // User login password
   name: text('name').notNull(),
   role: text('role').notNull().default('manager'), // 'admin' | 'super_manager' | 'manager' | 'department'
   branchId: integer('branch_id'),
   departmentId: integer('department_id'),
-  userCode: text('user_code'), // 4-digit numeric code for employee punch
+  userCode: text('user_code'), // 4-digit numeric code for employee punch / kiosk
   isActive: boolean('is_active').notNull().default(true),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });

@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
   uid TEXT NOT NULL UNIQUE,
   email TEXT NOT NULL,
+  password TEXT,
   name TEXT NOT NULL,
   role TEXT NOT NULL DEFAULT 'manager',
   branch_id INTEGER,
@@ -334,8 +335,62 @@ export async function initializeDatabaseSchema(): Promise<{
 }> {
   console.log('[PostgreSQL] Checking database schema & tables...');
   try {
-    // 1. Run Table & Index Creation DDL
-    await pool.query(INITIALIZE_TABLES_SQL);
+    // 1. Run Table & Index Creation DDL (if permissions allow)
+    try {
+      await pool.query(INITIALIZE_TABLES_SQL);
+    } catch (ddlErr: any) {
+      console.log('[PostgreSQL] Table schema managed by Cloud SQL migration or already initialized:', ddlErr.message || ddlErr);
+    }
+
+    // Dynamic column additions / sync for users
+    try {
+      try {
+        await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password TEXT;`);
+      } catch (alterErr) {
+        // Handled if already exists or permission
+      }
+
+      // Update existing blank passwords
+      await pool.query(`
+        UPDATE users SET password = 'admin' WHERE role = 'admin' AND (password IS NULL OR password = '');
+        UPDATE users SET password = 'super' WHERE role = 'super_manager' AND (password IS NULL OR password = '');
+        UPDATE users SET password = 'manager' WHERE role = 'manager' AND (password IS NULL OR password = '');
+        UPDATE users SET password = 'dept' WHERE role = 'department' AND (password IS NULL OR password = '');
+        UPDATE users SET password = 'password123' WHERE password IS NULL OR password = '';
+      `);
+
+      // Sync configured Admin user & password from environment secrets if provided
+      const envAdminUser = (process.env.ADMIN_USER || process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+      const envAdminPass = (process.env.ADMIN_PASSWORD || '').trim();
+      const envAdminName = (process.env.ADMIN_NAME || 'System Administrator').trim();
+
+      if (envAdminUser || envAdminPass) {
+        const targetEmail = envAdminUser || 'admin@company.local';
+        const targetPass = envAdminPass || 'admin';
+
+        const adminCheck = await pool.query(
+          `SELECT id FROM users WHERE LOWER(email) = $1 OR role = 'admin' ORDER BY id ASC LIMIT 1;`,
+          [targetEmail]
+        );
+
+        if (adminCheck.rows.length > 0) {
+          await pool.query(
+            `UPDATE users SET email = $1, password = $2, role = 'admin', is_active = true WHERE id = $3;`,
+            [targetEmail, targetPass, adminCheck.rows[0].id]
+          );
+          console.log(`[PostgreSQL] Synchronized Admin credentials from environment secret for ${targetEmail}.`);
+        } else {
+          await pool.query(
+            `INSERT INTO users (uid, email, password, name, role, is_active) VALUES ($1, $2, $3, $4, 'admin', true);`,
+            [`admin-secret-${Date.now()}`, targetEmail, targetPass, envAdminName]
+          );
+          console.log(`[PostgreSQL] Provisioned initial Admin user from environment secret for ${targetEmail}.`);
+        }
+      }
+    } catch (colErr) {
+      console.warn('[PostgreSQL] Column/Admin sync check notice:', colErr);
+    }
+
     console.log('[PostgreSQL] Database tables & indexes verified/created successfully.');
 
     // 2. Count existing tables in public schema

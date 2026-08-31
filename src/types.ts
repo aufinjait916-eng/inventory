@@ -47,6 +47,8 @@ export interface SystemUser {
   id: number;
   uid: string;
   email: string;
+  password?: string;
+  hasPassword?: boolean;
   name: string;
   role: UserRole;
   branchId?: number | null;

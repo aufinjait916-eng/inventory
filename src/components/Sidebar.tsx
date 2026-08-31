@@ -10,9 +10,9 @@ import {
   Building2,
   ScrollText,
   KeyRound,
-  Sparkles,
   Sliders,
   Database,
+  LogOut,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.tsx';
 import { UserRole } from '../types.ts';
@@ -36,7 +36,7 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
-  const { currentRole, currentUserName, dashboardStats, seedDemoData } = useApp();
+  const { currentRole, currentUserName, dashboardStats, logout } = useApp();
 
   const roleDisplayNames: Record<UserRole, string> = {
     admin: 'System Admin',
@@ -209,36 +209,35 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
         )}
       </nav>
 
-      {/* Database Status & Seed */}
+      {/* Database Status */}
       <div className="px-4 py-2.5 bg-slate-950/60 border-t border-slate-800/80 flex items-center justify-between text-xs">
-        <div className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-          <span className="text-[11px] text-slate-400 font-medium">PostgreSQL Live</span>
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span className="text-[11px] text-slate-300 font-semibold tracking-wide">Database Connected</span>
         </div>
-        <button
-          id="btn-seed-demo-data"
-          onClick={seedDemoData}
-          title="Reset database to demo dataset"
-          className="text-[11px] text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-1 transition"
-        >
-          <Sparkles className="w-3 h-3" />
-          <span>Reset Demo</span>
-        </button>
       </div>
 
       {/* User Profile Footer */}
-      <div className="p-4 bg-slate-900 border-t border-slate-800">
-        <div className="flex items-center">
-          <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs text-white font-bold shrink-0">
+      <div className="p-4 bg-slate-900 border-t border-slate-800 flex items-center justify-between">
+        <div className="flex items-center min-w-0">
+          <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-xs text-white font-bold shrink-0 shadow-xs">
             {getInitials(currentUserName)}
           </div>
           <div className="ml-3 min-w-0">
             <p className="text-xs font-bold text-white leading-none truncate">{currentUserName}</p>
-            <p className="text-[10px] text-slate-400 mt-1 uppercase font-semibold">
+            <p className="text-[10px] text-slate-400 mt-1 uppercase font-semibold tracking-wider">
               {roleDisplayNames[currentRole]}
             </p>
           </div>
         </div>
+        <button
+          onClick={logout}
+          title="Log out of session"
+          id="btn-sidebar-logout"
+          className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 rounded-lg transition cursor-pointer shrink-0 ml-2"
+        >
+          <LogOut className="w-4 h-4" />
+        </button>
       </div>
     </aside>
   );

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext.tsx';
 import { Sidebar, NavTab } from './components/Sidebar.tsx';
 import { Header } from './components/Header.tsx';
+import { LoginView } from './components/LoginView.tsx';
 import { DashboardView } from './components/DashboardView.tsx';
 import { InventoryView } from './components/InventoryView.tsx';
 import { ItemCreateModal } from './components/ItemCreateModal.tsx';
@@ -14,10 +15,10 @@ import { OrganizationView } from './components/OrganizationView.tsx';
 import { AuditLogsView } from './components/AuditLogsView.tsx';
 import { PostgresConfigView } from './components/PostgresConfigView.tsx';
 import { InventoryItem } from './types.ts';
-import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Info } from 'lucide-react';
 
 const MainLayout: React.FC = () => {
-  const { toast } = useApp();
+  const { authenticatedUser, toast } = useApp();
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
 
   // Quick modals across views
@@ -43,6 +44,36 @@ const MainLayout: React.FC = () => {
     setActiveTab(tab);
   };
 
+  if (!authenticatedUser) {
+    return (
+      <>
+        <LoginView />
+        {toast && (
+          <div className="fixed bottom-6 right-6 z-50 animate-in fade-in slide-in-from-bottom-5 duration-200">
+            <div
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-xl text-xs font-semibold border ${
+                toast.type === 'success'
+                  ? 'bg-emerald-950 text-emerald-200 border-emerald-800'
+                  : toast.type === 'error'
+                  ? 'bg-rose-950 text-rose-200 border-rose-800'
+                  : 'bg-slate-900 text-slate-100 border-slate-700'
+              }`}
+            >
+              {toast.type === 'success' ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              ) : toast.type === 'error' ? (
+                <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+              ) : (
+                <Info className="w-4 h-4 text-blue-400 shrink-0" />
+              )}
+              <span>{toast.message}</span>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#F8FAFC] font-sans text-slate-800 antialiased">
       {/* Side Menu Navigation System */}
@@ -50,7 +81,7 @@ const MainLayout: React.FC = () => {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Top Header with Role Switcher & Branch Selector */}
+        {/* Top Header with Branch & Authenticated User Details */}
         <Header />
 
         {/* Dynamic View Canvas */}

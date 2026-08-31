@@ -1,12 +1,9 @@
 import React from 'react';
 import {
-  Building,
-  LogIn,
   LogOut,
   AlertTriangle,
-  Layers,
-  Search,
-  Bell,
+  User,
+  Shield,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.tsx';
 import { UserRole } from '../types.ts';
@@ -14,40 +11,34 @@ import { UserRole } from '../types.ts';
 export const Header: React.FC = () => {
   const {
     currentRole,
-    setCurrentRole,
     currentBranchId,
     setCurrentBranchId,
     currentDepartmentId,
     setCurrentDepartmentId,
     currentUserName,
+    authenticatedUser,
     branches,
     departments,
     dashboardStats,
-    currentUser,
-    loginWithGoogle,
     logout,
   } = useApp();
 
-  const roleLabels: Record<UserRole, { title: string; badgeColor: string; desc: string }> = {
+  const roleLabels: Record<UserRole, { title: string; badgeColor: string }> = {
     admin: {
-      title: 'Admin',
+      title: 'System Administrator',
       badgeColor: 'bg-purple-50 text-purple-700 border-purple-200',
-      desc: 'All branches, category builder & permissions',
     },
     super_manager: {
       title: 'Super Manager',
       badgeColor: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-      desc: 'Dynamic fields, field sets, models & item catalog',
     },
     manager: {
       title: 'Manager',
       badgeColor: 'bg-blue-50 text-blue-700 border-blue-200',
-      desc: 'Assigned categories, stock control, approvals, transfers, repairs',
     },
     department: {
       title: 'Department Kiosk',
       badgeColor: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-      desc: 'Employee 4-digit PIN punch & machine assignment',
     },
   };
 
@@ -65,7 +56,7 @@ export const Header: React.FC = () => {
               id="header-branch-select"
               value={currentBranchId}
               onChange={(e) => setCurrentBranchId(parseInt(e.target.value))}
-              className="bg-slate-50 border border-slate-200 rounded px-2.5 py-1 font-semibold text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-semibold text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-xs"
             >
               {branches.map((b) => (
                 <option key={b.id} value={b.id}>
@@ -100,35 +91,8 @@ export const Header: React.FC = () => {
         )}
       </div>
 
-      {/* Center/Right: Role Switcher & Context Controls */}
+      {/* Right: Low Stock Alert & Authenticated User Profile + Logout */}
       <div className="flex items-center gap-4">
-        {/* Role Switcher Pill */}
-        <div className="hidden lg:flex items-center gap-2">
-          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-            <Layers className="w-3.5 h-3.5 text-slate-400" />
-            Role:
-          </span>
-          <div className="flex items-center p-0.5 bg-slate-100 rounded-md border border-slate-200">
-            {(['admin', 'super_manager', 'manager', 'department'] as UserRole[]).map((r) => {
-              const isSelected = currentRole === r;
-              return (
-                <button
-                  key={r}
-                  id={`role-switch-${r}`}
-                  onClick={() => setCurrentRole(r)}
-                  className={`px-2.5 py-1 rounded text-xs font-semibold transition-all ${
-                    isSelected
-                      ? 'bg-white text-slate-900 shadow-xs font-bold border border-slate-200/80'
-                      : 'text-slate-500 hover:text-slate-900'
-                  }`}
-                >
-                  {roleLabels[r].title}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
         {/* Low Stock Alert Pill */}
         {dashboardStats?.lowStockCount ? (
           <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
@@ -137,34 +101,37 @@ export const Header: React.FC = () => {
           </div>
         ) : null}
 
-        {/* User Profile / Google Sign-in */}
-        {currentUser ? (
-          <div className="flex items-center gap-2.5 pl-3 border-l border-slate-200">
-            <div className="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold shadow-xs">
-              {currentUser.displayName ? currentUser.displayName[0] : 'U'}
+        {/* User Profile Info & Logout */}
+        <div className="flex items-center gap-3 pl-3 border-l border-slate-200">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold shadow-xs">
+              {currentUserName ? currentUserName[0].toUpperCase() : 'U'}
             </div>
             <div className="hidden md:block text-left">
-              <p className="text-xs font-bold text-slate-800 leading-none">{currentUser.displayName || currentUser.email}</p>
-              <p className="text-[10px] text-slate-400 mt-0.5 font-medium">{roleLabels[currentRole].title}</p>
+              <p className="text-xs font-bold text-slate-800 leading-tight truncate max-w-[160px]">
+                {currentUserName}
+              </p>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className={`inline-block px-1.5 py-0.2 rounded text-[10px] font-bold border ${roleLabels[currentRole]?.badgeColor || 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+                  {roleLabels[currentRole]?.title || currentRole}
+                </span>
+                {(currentRole === 'admin' || currentRole === 'super_manager') && (
+                  <span className="text-[10px] text-slate-400 font-medium">· Global</span>
+                )}
+              </div>
             </div>
-            <button
-              onClick={logout}
-              title="Sign Out"
-              className="p-1 text-slate-400 hover:text-red-600 hover:bg-slate-50 rounded transition"
-            >
-              <LogOut className="w-3.5 h-3.5" />
-            </button>
           </div>
-        ) : (
+
           <button
-            id="btn-google-login"
-            onClick={loginWithGoogle}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition shadow-xs"
+            id="btn-header-logout"
+            onClick={logout}
+            title="Log out of session"
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition cursor-pointer shadow-xs ml-1"
           >
-            <LogIn className="w-3.5 h-3.5" />
-            <span>Google Auth</span>
+            <LogOut className="w-3.5 h-3.5 text-rose-600" />
+            <span>Logout</span>
           </button>
-        )}
+        </div>
       </div>
     </header>
   );

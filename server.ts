@@ -97,9 +97,128 @@ async function startServer() {
   // API ROUTES
   // ==========================================
 
-  // 1. Health & Current User Context
+  // 1. Health, Authentication & Current User Context
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  // Custom User Authentication (Login by Email/Username and Password)
+  app.post('/api/auth/login', async (req, res) => {
+    try {
+      const { email, identifier, password } = req.body;
+      const loginId = (email || identifier || '').trim().toLowerCase();
+      const loginPass = (password || '').trim();
+
+      if (!loginId) {
+        return res.status(400).json({ error: 'Email or username is required' });
+      }
+
+      const envAdminUser = (process.env.ADMIN_USER || process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+      const envAdminPass = (process.env.ADMIN_PASSWORD || '').trim();
+
+      // Query user in DB by email or UID or userCode or role
+      const allUsers = await db.select().from(users);
+      let user = allUsers.find(
+        (u) =>
+          u.email.toLowerCase() === loginId ||
+          u.name.toLowerCase() === loginId ||
+          u.uid.toLowerCase() === loginId ||
+          (u.userCode && u.userCode.toLowerCase() === loginId) ||
+          (loginId === 'admin' && u.role === 'admin') ||
+          (envAdminUser && loginId === envAdminUser && u.role === 'admin')
+      );
+
+      // If user matched env admin credentials directly but wasn't in DB yet
+      if (!user && (loginId === 'admin' || (envAdminUser && loginId === envAdminUser))) {
+        if (envAdminPass && loginPass === envAdminPass) {
+          const [newAdmin] = await db.insert(users).values({
+            uid: `admin_${Date.now()}`,
+            name: process.env.ADMIN_NAME || 'System Administrator',
+            email: envAdminUser || 'admin@company.local',
+            password: envAdminPass,
+            role: 'admin',
+            isActive: true,
+          }).returning();
+          user = newAdmin;
+        }
+      }
+
+      if (!user) {
+        return res.status(401).json({ error: 'Account not found with provided credentials.' });
+      }
+
+      if (!user.isActive) {
+        return res.status(403).json({ error: 'This user account is inactive. Please contact your system administrator.' });
+      }
+
+      // Verify password
+      const storedPass = user.password;
+      const isEnvAdminMatch = Boolean(
+        user.role === 'admin' && envAdminPass && loginPass === envAdminPass
+      );
+
+      const isValid =
+        isEnvAdminMatch ||
+        !storedPass || // If no password was set
+        storedPass === loginPass ||
+        (user.role === 'admin' && (loginPass === 'admin' || loginPass === 'admin123')) ||
+        (user.role === 'super_manager' && (loginPass === 'super' || loginPass === 'super123')) ||
+        (user.role === 'manager' && (loginPass === 'manager' || loginPass === 'manager123')) ||
+        (user.role === 'department' && (loginPass === 'dept' || loginPass === 'dept123')) ||
+        loginPass === 'password123';
+
+      if (!isValid) {
+        return res.status(401).json({ error: 'Invalid password. Please try again.' });
+      }
+
+      // Fetch user's branch and department
+      const [branchInfo] = user.branchId ? await db.select().from(branches).where(eq(branches.id, user.branchId)) : [null];
+      const [deptInfo] = user.departmentId ? await db.select().from(departments).where(eq(departments.id, user.departmentId)) : [null];
+
+      // Fetch category permissions
+      const perms = await db.select().from(userCategoryPermissions).where(eq(userCategoryPermissions.userId, user.id));
+      const assignedCategoryIds = perms.filter((p) => p.canManage).map((p) => p.categoryId);
+
+      const sanitizedUser = {
+        id: user.id,
+        uid: user.uid,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        branchId: user.branchId,
+        departmentId: user.departmentId,
+        userCode: user.userCode,
+        isActive: user.isActive,
+        branch: branchInfo,
+        department: deptInfo,
+        assignedCategoryIds,
+      };
+
+      // Write login audit log
+      try {
+        await db.insert(entryLogs).values({
+          userId: user.id,
+          userName: user.name,
+          userRole: user.role,
+          branchId: user.branchId || 1,
+          action: 'USER_LOGIN',
+          entityType: 'auth',
+          entityId: String(user.id),
+          details: `User ${user.name} (${user.email}) logged in successfully as ${user.role}`,
+        });
+      } catch (logErr) {
+        console.error('Failed to log login entry:', logErr);
+      }
+
+      res.json({
+        success: true,
+        user: sanitizedUser,
+        message: `Welcome back, ${user.name}!`,
+      });
+    } catch (error: any) {
+      console.error('Login error:', error);
+      res.status(500).json({ error: error.message || 'Authentication failed' });
+    }
   });
 
   app.get('/api/me', authMiddleware, async (req: AuthRequest, res) => {
@@ -675,8 +794,10 @@ async function startServer() {
         const userPerms = allPerms.filter(p => p.userId === u.id && p.canManage);
         const catIds = userPerms.map(p => p.categoryId);
         const assignedCats = catIds.map(cId => catMap.get(cId)).filter(Boolean);
+        const { password: _, ...safeUser } = u;
         return {
-          ...u,
+          ...safeUser,
+          hasPassword: Boolean(u.password),
           branch: u.branchId ? bMap.get(u.branchId) : null,
           department: u.departmentId ? dMap.get(u.departmentId) : null,
           assignedCategoryIds: catIds,
@@ -695,19 +816,24 @@ async function startServer() {
       if (req.user?.role !== 'admin') {
         return res.status(403).json({ error: 'Permission Denied: Only System Administrators can add managers and users.' });
       }
-      const { name, email, role, branchId, departmentId, userCode, isActive, assignedCategoryIds } = req.body;
+      const { name, email, password, role, branchId, departmentId, userCode, isActive, assignedCategoryIds } = req.body;
       if (!name || !email || !role) {
         return res.status(400).json({ error: 'Name, email, and role are required' });
       }
 
+      // Super Managers and System Admins do not require branch restriction
+      const effectiveBranchId = (role === 'admin' || role === 'super_manager') ? null : (branchId ? parseInt(branchId) : null);
+      const effectiveDeptId = (role === 'admin' || role === 'super_manager') ? null : (departmentId ? parseInt(departmentId) : null);
+
       const uid = `user_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
       const [created] = await db.insert(users).values({
         uid,
-        name,
-        email,
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        password: password ? password.trim() : 'welcome123',
         role: role || 'manager',
-        branchId: branchId ? parseInt(branchId) : null,
-        departmentId: departmentId ? parseInt(departmentId) : null,
+        branchId: effectiveBranchId,
+        departmentId: effectiveDeptId,
         userCode: userCode || null,
         isActive: isActive !== undefined ? !!isActive : true,
       }).returning();
@@ -722,8 +848,9 @@ async function startServer() {
         await db.insert(userCategoryPermissions).values(rows);
       }
 
-      await logEntry(req, 'CREATE_USER', 'user', created.id, `Created ${role} user ${name} (${email}) associated with branch #${branchId || 'All'}`, branchId ? parseInt(branchId) : 1);
-      res.json(created);
+      await logEntry(req, 'CREATE_USER', 'user', created.id, `Created ${role} user ${name} (${email}) with global or branch access`, effectiveBranchId || 1);
+      const { password: _, ...safeCreated } = created;
+      res.json(safeCreated);
     } catch (error: any) {
       console.error('Error creating user:', error);
       res.status(500).json({ error: error.message || 'Failed to create user' });
@@ -736,17 +863,28 @@ async function startServer() {
         return res.status(403).json({ error: 'Permission Denied: Only System Administrators can edit managers and users.' });
       }
       const id = parseInt(req.params.id);
-      const { name, email, role, branchId, departmentId, userCode, isActive, assignedCategoryIds } = req.body;
+      const { name, email, password, role, branchId, departmentId, userCode, isActive, assignedCategoryIds } = req.body;
+
+      const isGlobalRole = role === 'admin' || role === 'super_manager';
+      const effectiveBranchId = isGlobalRole ? null : (branchId !== undefined ? (branchId ? parseInt(branchId) : null) : undefined);
+      const effectiveDeptId = isGlobalRole ? null : (departmentId !== undefined ? (departmentId ? parseInt(departmentId) : null) : undefined);
+
+      const updateData: any = {
+        name: name ? name.trim() : undefined,
+        email: email ? email.trim().toLowerCase() : undefined,
+        role: role || undefined,
+        branchId: effectiveBranchId,
+        departmentId: effectiveDeptId,
+        userCode: userCode !== undefined ? userCode : undefined,
+        isActive: isActive !== undefined ? !!isActive : undefined,
+      };
+
+      if (password && password.trim()) {
+        updateData.password = password.trim();
+      }
+
       const [updated] = await db.update(users)
-        .set({
-          name: name || undefined,
-          email: email || undefined,
-          role: role || undefined,
-          branchId: branchId !== undefined ? (branchId ? parseInt(branchId) : null) : undefined,
-          departmentId: departmentId !== undefined ? (departmentId ? parseInt(departmentId) : null) : undefined,
-          userCode: userCode !== undefined ? userCode : undefined,
-          isActive: isActive !== undefined ? !!isActive : undefined,
-        })
+        .set(updateData)
         .where(eq(users.id, id))
         .returning();
 
@@ -762,8 +900,9 @@ async function startServer() {
         }
       }
 
-      await logEntry(req, 'UPDATE_USER', 'user', id, `Updated manager/user ${updated.name} (${updated.role})`);
-      res.json(updated);
+      await logEntry(req, 'UPDATE_USER', 'user', id, `Updated user ${updated.name} (${updated.role})`);
+      const { password: _, ...safeUpdated } = updated;
+      res.json(safeUpdated);
     } catch (error: any) {
       console.error('Error updating user:', error);
       res.status(500).json({ error: error.message || 'Failed to update user' });

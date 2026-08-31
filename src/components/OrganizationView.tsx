@@ -56,10 +56,10 @@ export const OrganizationView: React.FC = () => {
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [userName, setUserName] = useState('');
   const [userEmail, setUserEmail] = useState('');
+  const [userPassword, setUserPassword] = useState('');
   const [userRole, setUserRole] = useState<'manager' | 'super_manager' | 'admin' | 'department'>('manager');
   const [userBranchId, setUserBranchId] = useState<number | ''>(currentBranchId);
   const [userDeptId, setUserDeptId] = useState<number | ''>('');
-  const [userCode, setUserCode] = useState('');
   const [userActive, setUserActive] = useState<boolean>(true);
   const [userAssignedCategoryIds, setUserAssignedCategoryIds] = useState<number[]>([]);
 
@@ -628,12 +628,12 @@ export const OrganizationView: React.FC = () => {
     setEditingUserId(null);
     setUserName('');
     setUserEmail('');
+    setUserPassword('');
     setUserRole('manager');
     setUserBranchId(currentBranchId);
     setUserDeptId('');
-    setUserCode(`MGR-${Math.floor(100 + Math.random() * 900)}`);
     setUserActive(true);
-    // By default, select all categories for a new manager to be friendly, or empty
+    // By default, select all categories for a new manager
     setUserAssignedCategoryIds(allCategories.map((c) => c.id));
     setIsUserModalOpen(true);
   };
@@ -642,10 +642,10 @@ export const OrganizationView: React.FC = () => {
     setEditingUserId(u.id);
     setUserName(u.name);
     setUserEmail(u.email);
+    setUserPassword('');
     setUserRole(u.role as any);
     setUserBranchId(u.branchId || '');
     setUserDeptId(u.departmentId || '');
-    setUserCode(u.userCode || '');
     setUserActive(u.isActive !== false);
     setUserAssignedCategoryIds(u.assignedCategoryIds || []);
     setIsUserModalOpen(true);
@@ -653,48 +653,50 @@ export const OrganizationView: React.FC = () => {
 
   const handleSaveUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userName || !userEmail || !userRole) {
-      showToast('Name, email, and role are required', 'error');
+    if (!userName.trim() || !userEmail.trim() || !userRole) {
+      showToast('Full name, email, and role are required', 'error');
+      return;
+    }
+
+    const isGlobalRole = userRole === 'admin' || userRole === 'super_manager';
+    if (!isGlobalRole && !userBranchId) {
+      showToast('Please select an assigned branch for this user role', 'error');
       return;
     }
 
     try {
       setSubmitting(true);
+      const payload: any = {
+        name: userName.trim(),
+        email: userEmail.trim().toLowerCase(),
+        role: userRole,
+        branchId: isGlobalRole ? null : (userBranchId ? Number(userBranchId) : null),
+        departmentId: isGlobalRole ? null : (userDeptId ? Number(userDeptId) : null),
+        isActive: userActive,
+        assignedCategoryIds: userRole === 'manager' ? userAssignedCategoryIds : undefined,
+      };
+
+      if (userPassword && userPassword.trim()) {
+        payload.password = userPassword.trim();
+      }
+
       if (editingUserId) {
         await fetchApi(`/api/users/${editingUserId}`, {
           method: 'PUT',
-          body: JSON.stringify({
-            name: userName,
-            email: userEmail,
-            role: userRole,
-            branchId: userBranchId ? Number(userBranchId) : null,
-            departmentId: userDeptId ? Number(userDeptId) : null,
-            userCode: userCode || null,
-            isActive: userActive,
-            assignedCategoryIds: userRole === 'manager' ? userAssignedCategoryIds : undefined,
-          }),
+          body: JSON.stringify(payload),
         });
-        showToast(`Manager "${userName}" updated!`, 'success');
+        showToast(`User "${userName}" updated successfully!`, 'success');
       } else {
         await fetchApi('/api/users', {
           method: 'POST',
-          body: JSON.stringify({
-            name: userName,
-            email: userEmail,
-            role: userRole,
-            branchId: userBranchId ? Number(userBranchId) : null,
-            departmentId: userDeptId ? Number(userDeptId) : null,
-            userCode: userCode || null,
-            isActive: userActive,
-            assignedCategoryIds: userRole === 'manager' ? userAssignedCategoryIds : undefined,
-          }),
+          body: JSON.stringify(payload),
         });
-        showToast(`Manager "${userName}" registered and associated with branch!`, 'success');
+        showToast(`User "${userName}" created successfully!`, 'success');
       }
       setIsUserModalOpen(false);
       await loadData();
     } catch (err: any) {
-      showToast(err.message || 'Failed to save manager record', 'error');
+      showToast(err.message || 'Failed to save user record', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -1098,14 +1100,14 @@ export const OrganizationView: React.FC = () => {
                         </span>
                       </div>
 
-                      {u.userCode && (
+                      {u.hasPassword && (
                         <div className="flex items-center justify-between text-[11px]">
                           <span className="text-slate-500 flex items-center gap-1">
-                            <KeyRound className="w-3 h-3 text-slate-400" />
-                            <span>Manager Code:</span>
+                            <KeyRound className="w-3 h-3 text-emerald-600" />
+                            <span>Password Protected:</span>
                           </span>
-                          <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded text-[10px]">
-                            {u.userCode}
+                          <span className="font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded text-[10px] border border-emerald-200">
+                            Configured
                           </span>
                         </div>
                       )}
@@ -1940,15 +1942,15 @@ export const OrganizationView: React.FC = () => {
       {/* Modal: Add/Edit Manager / User */}
       {isUserModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div className="flex items-center gap-2">
                 <UserCheck className="w-5 h-5 text-indigo-600" />
                 <h3 className="text-base font-bold text-slate-900">
-                  {editingUserId ? 'Edit Manager Record' : 'Add Manager & Associate Branch'}
+                  {editingUserId ? 'Edit User Record' : 'Create User Account'}
                 </h3>
               </div>
-              <button onClick={() => setIsUserModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-700">
+              <button onClick={() => setIsUserModalOpen(false)} className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer">
                 ✕
               </button>
             </div>
@@ -1956,7 +1958,7 @@ export const OrganizationView: React.FC = () => {
             <form onSubmit={handleSaveUser} className="space-y-3 text-xs">
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
-                  Manager Full Name <span className="text-red-500">*</span>
+                  Full Name <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -1975,76 +1977,90 @@ export const OrganizationView: React.FC = () => {
                 <input
                   type="email"
                   required
-                  placeholder="sarah.jenkins@branch.com"
+                  placeholder="sarah.jenkins@factory.com"
                   value={userEmail}
                   onChange={(e) => setUserEmail(e.target.value)}
                   className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    System Role <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={userRole}
-                    onChange={(e) => setUserRole(e.target.value as any)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white"
-                  >
-                    <option value="manager">Manager</option>
-                    <option value="super_manager">Super Manager</option>
-                    <option value="department">Department Head</option>
-                    <option value="admin">System Administrator</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">
-                    Assigned Branch <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={userBranchId}
-                    onChange={(e) => setUserBranchId(e.target.value ? Number(e.target.value) : '')}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white"
-                  >
-                    {allBranches.map((b) => (
-                      <option key={b.id} value={b.id}>
-                        {b.name} ({b.code})
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  {editingUserId ? 'Change Password (Optional)' : 'User Password'}
+                </label>
+                <input
+                  type="password"
+                  placeholder={editingUserId ? 'Leave blank to keep existing password' : 'Set password (e.g. welcome123)'}
+                  value={userPassword}
+                  onChange={(e) => setUserPassword(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  {editingUserId ? 'Leave blank if you do not wish to change the password.' : 'Default password is "welcome123" if left blank.'}
+                </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Department (Optional)</label>
-                  <select
-                    value={userDeptId}
-                    onChange={(e) => setUserDeptId(e.target.value ? Number(e.target.value) : '')}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white"
-                  >
-                    <option value="">All Departments in Branch</option>
-                    {departments.map((d) => (
-                      <option key={d.id} value={d.id}>
-                        {d.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1">Manager Employee Code</label>
-                  <input
-                    type="text"
-                    placeholder="MGR-101"
-                    value={userCode}
-                    onChange={(e) => setUserCode(e.target.value.toUpperCase())}
-                    className="w-full px-3 py-2 font-mono uppercase border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white"
-                  />
-                </div>
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  System Role <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={userRole}
+                  onChange={(e) => setUserRole(e.target.value as any)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white"
+                >
+                  <option value="manager">Manager</option>
+                  <option value="super_manager">Super Manager (All Branches)</option>
+                  <option value="department">Department Head</option>
+                  <option value="admin">System Administrator (All Branches)</option>
+                </select>
               </div>
+
+              {/* Conditional Branch & Department assignment */}
+              {userRole === 'admin' || userRole === 'super_manager' ? (
+                <div className="p-3 bg-violet-50 border border-violet-200 rounded-xl text-violet-800 text-[11px] flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-violet-600 flex-shrink-0" />
+                  <span>
+                    <strong>Global Access:</strong> {userRole === 'admin' ? 'System Administrators' : 'Super Managers'} have full access across all branches. Branch assignment is not needed.
+                  </span>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Assigned Branch <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={userBranchId}
+                      required
+                      onChange={(e) => setUserBranchId(e.target.value ? Number(e.target.value) : '')}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white"
+                    >
+                      {allBranches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          {b.name} ({b.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Department (Optional)</label>
+                    <select
+                      value={userDeptId}
+                      onChange={(e) => setUserDeptId(e.target.value ? Number(e.target.value) : '')}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white"
+                    >
+                      <option value="">All Departments in Branch</option>
+                      {departments.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
 
               {/* Category Assignment Section (For Managers) */}
               {userRole === 'manager' && (
@@ -2120,9 +2136,9 @@ export const OrganizationView: React.FC = () => {
                   id="userActiveCheck"
                   checked={userActive}
                   onChange={(e) => setUserActive(e.target.checked)}
-                  className="w-4 h-4 text-indigo-600 rounded"
+                  className="w-4 h-4 text-indigo-600 rounded cursor-pointer"
                 />
-                <label htmlFor="userActiveCheck" className="text-slate-700 font-semibold cursor-pointer">
+                <label htmlFor="userActiveCheck" className="text-slate-700 font-semibold cursor-pointer select-none">
                   Active User Status (Enabled for login and management)
                 </label>
               </div>
@@ -2138,9 +2154,9 @@ export const OrganizationView: React.FC = () => {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-md disabled:opacity-50 cursor-pointer"
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-md disabled:opacity-50 cursor-pointer transition"
                 >
-                  {editingUserId ? 'Update Manager' : 'Save Manager'}
+                  {editingUserId ? 'Update User' : 'Create User'}
                 </button>
               </div>
             </form>

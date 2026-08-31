@@ -1,10 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { UserRole, Branch, Department, Category, DashboardStats } from '../types.ts';
+import { UserRole, Branch, Department, Category, DashboardStats, SystemUser } from '../types.ts';
 import { fetchApi } from '../lib/api.ts';
-import { auth, googleAuthProvider } from '../lib/firebase.ts';
-import { signInWithPopup, signOut, onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 
 interface AppContextType {
+  authenticatedUser: SystemUser | null;
+  isAuthenticated: boolean;
+  login: (identifier: string, password?: string) => Promise<{ success: boolean; user?: SystemUser; error?: string }>;
+  logout: () => void;
+
   currentRole: UserRole;
   setCurrentRole: (role: UserRole) => void;
   currentBranchId: number;
@@ -19,11 +22,6 @@ interface AppContextType {
   categories: Category[];
   dashboardStats: DashboardStats | null;
   
-  currentUser: FirebaseUser | null;
-  isFirebaseLoading: boolean;
-  loginWithGoogle: () => Promise<void>;
-  logout: () => Promise<void>;
-  
   refreshAll: () => Promise<void>;
   seedDemoData: () => Promise<void>;
   
@@ -34,6 +32,33 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [authenticatedUser, setAuthenticatedUser] = useState<SystemUser | null>(() => {
+    try {
+      const saved = localStorage.getItem('app_authenticated_user');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch {
+      // ignore
+    }
+    // Default demo session if previously authenticated or initialized
+    const savedRole = localStorage.getItem('app_role');
+    if (savedRole) {
+      return {
+        id: parseInt(localStorage.getItem('app_user_id') || '1'),
+        uid: 'user-admin-1',
+        email: 'admin@company.local',
+        name: localStorage.getItem('app_user_name') || 'Arthur Pendelton (Admin)',
+        role: (savedRole as UserRole) || 'admin',
+        branchId: parseInt(localStorage.getItem('app_branch_id') || '1'),
+        departmentId: parseInt(localStorage.getItem('app_dept_id') || '1'),
+        isActive: true,
+        createdAt: new Date().toISOString(),
+      };
+    }
+    return null;
+  });
+
   const [currentRole, setRoleState] = useState<UserRole>(() => {
     return (localStorage.getItem('app_role') as UserRole) || 'admin';
   });
@@ -52,8 +77,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [categories, setCategories] = useState<Category[]>([]);
   const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null);
 
-  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
-  const [isFirebaseLoading, setIsFirebaseLoading] = useState<boolean>(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -63,19 +86,57 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     }, 4000);
   };
 
+  const login = async (identifier: string, password?: string): Promise<{ success: boolean; user?: SystemUser; error?: string }> => {
+    try {
+      const response = await fetchApi<{ success: boolean; user: SystemUser; message?: string }>('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ identifier, password }),
+      });
+
+      if (response && response.user) {
+        const u = response.user;
+        setAuthenticatedUser(u);
+        localStorage.setItem('app_authenticated_user', JSON.stringify(u));
+        
+        setRoleState(u.role);
+        localStorage.setItem('app_role', u.role);
+
+        const branchIdToSet = u.branchId || 1;
+        setBranchState(branchIdToSet);
+        localStorage.setItem('app_branch_id', branchIdToSet.toString());
+
+        const deptIdToSet = u.departmentId || 1;
+        setDeptState(deptIdToSet);
+        localStorage.setItem('app_dept_id', deptIdToSet.toString());
+
+        setNameState(u.name);
+        localStorage.setItem('app_user_name', u.name);
+        localStorage.setItem('app_user_id', u.id.toString());
+
+        showToast(response.message || `Welcome back, ${u.name}!`, 'success');
+        await refreshAll();
+        return { success: true, user: u };
+      }
+      return { success: false, error: 'Failed to authenticate user' };
+    } catch (err: any) {
+      const errMsg = err.message || 'Invalid username or password';
+      showToast(errMsg, 'error');
+      return { success: false, error: errMsg };
+    }
+  };
+
+  const logout = () => {
+    setAuthenticatedUser(null);
+    localStorage.removeItem('app_authenticated_user');
+    localStorage.removeItem('app_role');
+    localStorage.removeItem('app_user_name');
+    localStorage.removeItem('app_user_id');
+    showToast('Logged out of session', 'info');
+  };
+
   const setCurrentRole = (role: UserRole) => {
     setRoleState(role);
     localStorage.setItem('app_role', role);
-    
-    // Set typical user name corresponding to role for realistic logs
-    let sampleName = 'Arthur Pendelton (Admin)';
-    if (role === 'super_manager') sampleName = 'Claire Sterling (Super Manager)';
-    else if (role === 'manager') sampleName = 'Robert Fox (Manager)';
-    else if (role === 'department') sampleName = 'Assembly Dept Terminal';
-    
-    setNameState(sampleName);
-    localStorage.setItem('app_user_name', sampleName);
-    showToast(`Switched active workspace role to ${role.replace('_', ' ').toUpperCase()}`, 'info');
   };
 
   const setCurrentBranchId = (id: number) => {
@@ -91,53 +152,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const setCurrentUserName = (name: string) => {
     setNameState(name);
     localStorage.setItem('app_user_name', name);
-  };
-
-  // Firebase Auth listener
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
-      setIsFirebaseLoading(false);
-      if (user) {
-        if (user.displayName) {
-          setNameState(user.displayName);
-          localStorage.setItem('app_user_name', user.displayName);
-        }
-      }
-    });
-    return () => unsubscribe();
-  }, []);
-
-  const loginWithGoogle = async () => {
-    try {
-      const result = await signInWithPopup(auth, googleAuthProvider);
-      if (result.user.displayName) {
-        setNameState(result.user.displayName);
-        localStorage.setItem('app_user_name', result.user.displayName);
-      }
-      showToast(`Signed in as ${result.user.email}`, 'success');
-      await refreshAll();
-    } catch (err: any) {
-      // User dismissed or closed the sign-in popup dialog
-      if (
-        err?.code === 'auth/popup-closed-by-user' ||
-        err?.code === 'auth/cancelled-popup-request' ||
-        err?.code === 'auth/user-cancelled'
-      ) {
-        return;
-      }
-      console.error('Google Sign-in error:', err);
-      showToast(err.message || 'Google sign-in failed', 'error');
-    }
-  };
-
-  const logout = async () => {
-    try {
-      await signOut(auth);
-      showToast('Signed out from Google Auth', 'info');
-    } catch (err: any) {
-      console.error('Sign-out error:', err);
-    }
   };
 
   const refreshAll = async () => {
@@ -170,12 +184,18 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   useEffect(() => {
-    refreshAll();
-  }, [currentRole, currentBranchId]);
+    if (authenticatedUser) {
+      refreshAll();
+    }
+  }, [currentRole, currentBranchId, authenticatedUser]);
 
   return (
     <AppContext.Provider
       value={{
+        authenticatedUser,
+        isAuthenticated: !!authenticatedUser,
+        login,
+        logout,
         currentRole,
         setCurrentRole,
         currentBranchId,
@@ -188,10 +208,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         departments,
         categories,
         dashboardStats,
-        currentUser,
-        isFirebaseLoading,
-        loginWithGoogle,
-        logout,
         refreshAll,
         seedDemoData,
         toast,
