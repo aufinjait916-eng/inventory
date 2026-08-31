@@ -1,5 +1,6 @@
 import { pool } from './index.ts';
 import { seedDatabase } from './seed.ts';
+import { hashPassword, isPasswordHashed } from '../lib/auth-crypto.ts';
 
 export const SCHEMA_TABLES = [
   'branches',
@@ -342,22 +343,13 @@ export async function initializeDatabaseSchema(): Promise<{
       console.log('[PostgreSQL] Table schema managed by Cloud SQL migration or already initialized:', ddlErr.message || ddlErr);
     }
 
-    // Dynamic column additions / sync for users
+    // Dynamic column additions / sync and encryption for users
     try {
       try {
         await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password TEXT;`);
       } catch (alterErr) {
         // Handled if already exists or permission
       }
-
-      // Update existing blank passwords
-      await pool.query(`
-        UPDATE users SET password = 'admin' WHERE role = 'admin' AND (password IS NULL OR password = '');
-        UPDATE users SET password = 'super' WHERE role = 'super_manager' AND (password IS NULL OR password = '');
-        UPDATE users SET password = 'manager' WHERE role = 'manager' AND (password IS NULL OR password = '');
-        UPDATE users SET password = 'dept' WHERE role = 'department' AND (password IS NULL OR password = '');
-        UPDATE users SET password = 'password123' WHERE password IS NULL OR password = '';
-      `);
 
       // Sync configured Admin user & password from environment secrets if provided
       const envAdminUser = (process.env.ADMIN_USER || process.env.ADMIN_EMAIL || '').trim().toLowerCase();
@@ -367,28 +359,47 @@ export async function initializeDatabaseSchema(): Promise<{
       if (envAdminUser || envAdminPass) {
         const targetEmail = envAdminUser || 'admin@company.local';
         const targetPass = envAdminPass || 'admin';
+        const encryptedAdminPass = hashPassword(targetPass);
 
         const adminCheck = await pool.query(
-          `SELECT id FROM users WHERE LOWER(email) = $1 OR role = 'admin' ORDER BY id ASC LIMIT 1;`,
+          `SELECT id, password FROM users WHERE LOWER(email) = $1 OR role = 'admin' ORDER BY id ASC LIMIT 1;`,
           [targetEmail]
         );
 
         if (adminCheck.rows.length > 0) {
           await pool.query(
             `UPDATE users SET email = $1, password = $2, role = 'admin', is_active = true WHERE id = $3;`,
-            [targetEmail, targetPass, adminCheck.rows[0].id]
+            [targetEmail, encryptedAdminPass, adminCheck.rows[0].id]
           );
-          console.log(`[PostgreSQL] Synchronized Admin credentials from environment secret for ${targetEmail}.`);
+          console.log(`[PostgreSQL] Synchronized and encrypted Admin credentials from environment secret for ${targetEmail}.`);
         } else {
           await pool.query(
             `INSERT INTO users (uid, email, password, name, role, is_active) VALUES ($1, $2, $3, $4, 'admin', true);`,
-            [`admin-secret-${Date.now()}`, targetEmail, targetPass, envAdminName]
+            [`admin-secret-${Date.now()}`, targetEmail, encryptedAdminPass, envAdminName]
           );
-          console.log(`[PostgreSQL] Provisioned initial Admin user from environment secret for ${targetEmail}.`);
+          console.log(`[PostgreSQL] Provisioned initial Admin user with encrypted password from environment secret for ${targetEmail}.`);
+        }
+      }
+
+      // Encrypt / hash all user passwords that are unhashed or blank
+      const allUsersRes = await pool.query(`SELECT id, role, password FROM users;`);
+      for (const u of allUsersRes.rows) {
+        if (!u.password || !isPasswordHashed(u.password)) {
+          let plainToHash = u.password;
+          if (!plainToHash) {
+            if (u.role === 'admin') plainToHash = 'admin';
+            else if (u.role === 'super_manager') plainToHash = 'super';
+            else if (u.role === 'manager') plainToHash = 'manager';
+            else if (u.role === 'department') plainToHash = 'dept';
+            else plainToHash = 'welcome123';
+          }
+          const encryptedHash = hashPassword(plainToHash);
+          await pool.query(`UPDATE users SET password = $1 WHERE id = $2;`, [encryptedHash, u.id]);
+          console.log(`[PostgreSQL] Encrypted password for user #${u.id} (${u.role}) with strong bcrypt encryption.`);
         }
       }
     } catch (colErr) {
-      console.warn('[PostgreSQL] Column/Admin sync check notice:', colErr);
+      console.warn('[PostgreSQL] Column/Admin sync and encryption notice:', colErr);
     }
 
     console.log('[PostgreSQL] Database tables & indexes verified/created successfully.');

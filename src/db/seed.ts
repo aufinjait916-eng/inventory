@@ -24,6 +24,7 @@ import {
   users,
 } from './schema.ts';
 import { eq } from 'drizzle-orm';
+import { hashPassword } from '../lib/auth-crypto.ts';
 
 export async function seedDatabase() {
   try {
@@ -153,10 +154,10 @@ export async function seedDatabase() {
 
     // 12. Users
     await db.insert(users).values([
-      { uid: 'admin-001', email: 'admin@company.local', password: 'admin', name: 'Arthur Pendelton', role: 'admin', branchId: b1.id, departmentId: d1.id, userCode: '9999' },
-      { uid: 'super-001', email: 'super@company.local', password: 'super', name: 'Claire Sterling', role: 'super_manager', branchId: b1.id, departmentId: d1.id, userCode: '8888' },
-      { uid: 'mgr-001', email: 'manager.hq@company.local', password: 'manager', name: 'Robert Fox', role: 'manager', branchId: b1.id, departmentId: d1.id, userCode: '7777' },
-      { uid: 'dept-001', email: 'dept.prod@company.local', password: 'dept', name: 'Assembly Dept Terminal', role: 'department', branchId: b1.id, departmentId: d1.id, userCode: '1001' },
+      { uid: 'admin-001', email: 'admin@company.local', password: hashPassword('admin'), name: 'Arthur Pendelton', role: 'admin', branchId: b1.id, departmentId: d1.id, userCode: '9999' },
+      { uid: 'super-001', email: 'super@company.local', password: hashPassword('super'), name: 'Claire Sterling', role: 'super_manager', branchId: b1.id, departmentId: d1.id, userCode: '8888' },
+      { uid: 'mgr-001', email: 'manager.hq@company.local', password: hashPassword('manager'), name: 'Robert Fox', role: 'manager', branchId: b1.id, departmentId: d1.id, userCode: '7777' },
+      { uid: 'dept-001', email: 'dept.prod@company.local', password: hashPassword('dept'), name: 'Assembly Dept Terminal', role: 'department', branchId: b1.id, departmentId: d1.id, userCode: '1001' },
     ]);
 
     // Permissions for Super Manager and Manager

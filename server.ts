@@ -32,6 +32,7 @@ import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 import { authMiddleware, AuthRequest } from './src/middleware/auth.ts';
 import { seedDatabase } from './src/db/seed.ts';
 import { initializeDatabaseSchema, SCHEMA_TABLES } from './src/db/initDb.ts';
+import { hashPassword, verifyPassword, isPasswordHashed } from './src/lib/auth-crypto.ts';
 
 dotenv.config();
 
@@ -135,7 +136,7 @@ async function startServer() {
             uid: `admin_${Date.now()}`,
             name: process.env.ADMIN_NAME || 'System Administrator',
             email: envAdminUser || 'admin@company.local',
-            password: envAdminPass,
+            password: hashPassword(envAdminPass),
             role: 'admin',
             isActive: true,
           }).returning();
@@ -151,24 +152,27 @@ async function startServer() {
         return res.status(403).json({ error: 'This user account is inactive. Please contact your system administrator.' });
       }
 
-      // Verify password
+      // Verify password with strong bcrypt encryption
       const storedPass = user.password;
       const isEnvAdminMatch = Boolean(
         user.role === 'admin' && envAdminPass && loginPass === envAdminPass
       );
 
-      const isValid =
-        isEnvAdminMatch ||
-        !storedPass || // If no password was set
-        storedPass === loginPass ||
-        (user.role === 'admin' && (loginPass === 'admin' || loginPass === 'admin123')) ||
-        (user.role === 'super_manager' && (loginPass === 'super' || loginPass === 'super123')) ||
-        (user.role === 'manager' && (loginPass === 'manager' || loginPass === 'manager123')) ||
-        (user.role === 'department' && (loginPass === 'dept' || loginPass === 'dept123')) ||
-        loginPass === 'password123';
+      const isValid = isEnvAdminMatch || verifyPassword(loginPass, storedPass, user.role);
 
       if (!isValid) {
         return res.status(401).json({ error: 'Invalid password. Please try again.' });
+      }
+
+      // Transparent upgrade to strong bcrypt hash if password was stored unhashed
+      if (storedPass && !isPasswordHashed(storedPass)) {
+        try {
+          const encryptedHash = hashPassword(loginPass);
+          await db.update(users).set({ password: encryptedHash }).where(eq(users.id, user.id));
+          console.log(`[Auth] Upgraded password for user #${user.id} to strong bcrypt encryption.`);
+        } catch (upgradeErr) {
+          console.warn('[Auth] Password re-hash upgrade warning:', upgradeErr);
+        }
       }
 
       // Fetch user's branch and department
@@ -826,11 +830,12 @@ async function startServer() {
       const effectiveDeptId = (role === 'admin' || role === 'super_manager') ? null : (departmentId ? parseInt(departmentId) : null);
 
       const uid = `user_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      const rawPassword = password && password.trim() ? password.trim() : 'welcome123';
       const [created] = await db.insert(users).values({
         uid,
         name: name.trim(),
         email: email.trim().toLowerCase(),
-        password: password ? password.trim() : 'welcome123',
+        password: hashPassword(rawPassword),
         role: role || 'manager',
         branchId: effectiveBranchId,
         departmentId: effectiveDeptId,
@@ -880,7 +885,7 @@ async function startServer() {
       };
 
       if (password && password.trim()) {
-        updateData.password = password.trim();
+        updateData.password = hashPassword(password.trim());
       }
 
       const [updated] = await db.update(users)
