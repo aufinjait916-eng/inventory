@@ -10,9 +10,9 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Install build dependencies
+# Install build dependencies (supports presence or absence of package-lock.json)
 COPY package*.json ./
-RUN npm ci
+RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
 # Copy all source files
 COPY . .
@@ -35,7 +35,7 @@ RUN apk add --no-cache curl
 
 # Install production dependencies only
 COPY package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev; fi && npm cache clean --force
 
 # Copy built application assets and server bundle from builder stage
 COPY --from=builder /app/dist ./dist
