@@ -11,7 +11,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build-and-push:
@@ -24,6 +23,15 @@ jobs:
     steps:
       - name: Checkout repository code
         uses: actions/checkout@v4
+
+      - name: Verify workspace files
+        run: |
+          echo "Current working directory: $(pwd)"
+          ls -la
+          if [ ! -f "Dockerfile" ]; then
+            echo "::error::Dockerfile not found in root! Checking for lowercase or nested dockerfile..."
+            find . -maxdepth 2 -iname "*dockerfile*"
+          fi
 
       - name: Set up QEMU for multi-platform support
         uses: docker/setup-qemu-action@v3
@@ -38,11 +46,17 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Lowercase image name (GHCR requirement)
+        id: image_name
+        run: |
+          IMAGE_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "image_name=${IMAGE_LOWER}" >> "$GITHUB_OUTPUT"
+
       - name: Extract Docker metadata and tags
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ steps.image_name.outputs.image_name }}
           tags: |
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master' }}
             type=semver,pattern={{version}}
