@@ -159,11 +159,12 @@ export const PostgresConfigView: React.FC = () => {
 
   // Code templates
   const dockerfileSnippet = `# Multi-stage Build for AssetFlow (React + Express + PostgreSQL + Drizzle)
-FROM node:22-alpine AS builder
+# Compatible with linux/amd64 and linux/arm64 (Apple Silicon, TrueNAS, Raspberry Pi)
+FROM node:22-bookworm-slim AS builder
 
 WORKDIR /app
 
-# Install build dependencies (supports presence or absence of package-lock.json)
+# Install build dependencies
 COPY package*.json ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
@@ -174,25 +175,28 @@ COPY . .
 RUN npm run build
 
 # Production Runtime
-FROM node:22-alpine AS runner
+FROM node:22-bookworm-slim AS runner
 
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 
 # Install curl for container health check
-RUN apk add --no-cache curl
+RUN apt-get update && \\
+    apt-get install -y --no-install-recommends curl && \\
+    rm -rf /var/lib/apt/lists/*
 
 # Copy package manifests and install only production dependencies
 COPY package*.json ./
-RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev; fi && npm cache clean --force
+RUN if [ -f package-lock.json ]; then npm ci --omit=dev; else npm install --omit=dev --no-audit --no-fund; fi && \\
+    npm cache clean --force
 
 # Copy built application output from builder stage
 COPY --from=builder /app/dist ./dist
 
-# Create non-root system user for secure container execution
-RUN addgroup -g 1001 -S nodejs && \\
-    adduser -S nodejs -u 1001 && \\
+# Create non-root system user for secure container execution (Debian format)
+RUN groupadd -g 1001 nodejs && \\
+    useradd -u 1001 -g nodejs -s /bin/sh -m nodejs && \\
     chown -R nodejs:nodejs /app
 
 USER nodejs
