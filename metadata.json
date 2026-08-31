@@ -1,0 +1,6 @@
+{
+  "name": "Asset & Consumables Management",
+  "description": "Multi-branch asset and consumables inventory management, custom field sets, employee requests, location tracking, transfers, and vendor repair logging.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

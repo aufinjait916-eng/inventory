@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  # ==========================================
+  # AssetFlow Application Container
+  # ==========================================
+  app:
+    image: ghcr.io/your-github-username/assetflow:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: assetflow-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      # PostgreSQL Database Credentials
+      - SQL_HOST=postgres
+      - SQL_PORT=5432
+      - SQL_USER=assetflow_user
+      - SQL_PASSWORD=YourSecurePassword123!
+      - SQL_DB_NAME=assetflow_db
+      - SQL_SSL=false
+      - SQL_POOL_MAX=20
+      # Optional: AI Studio Gemini API Key for smart suggestions
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - assetflow-net
+
+  # ==========================================
+  # PostgreSQL 16 Alpine Database Container
+  # ==========================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: assetflow-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=assetflow_user
+      - POSTGRES_PASSWORD=YourSecurePassword123!
+      - POSTGRES_DB=assetflow_db
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    volumes:
+      # Named volume or TrueNAS Scale dataset mount
+      - assetflow-pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432" # Expose only if external DB access is needed
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U assetflow_user -d assetflow_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - assetflow-net
+
+volumes:
+  assetflow-pgdata:
+    name: assetflow-pgdata
+    # Optional TrueNAS host bind mount:
+    # driver: local
+    # driver_opts:
+    #   type: none
+    #   o: bind
+    #   device: /mnt/tank/appdata/assetflow-db
+
+networks:
+  assetflow-net:
+    name: assetflow-net
+    driver: bridge
