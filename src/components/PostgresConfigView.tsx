@@ -51,6 +51,7 @@ export const PostgresConfigView: React.FC = () => {
 
   // Maintenance State
   const [vacuuming, setVacuuming] = useState(false);
+  const [initializingTables, setInitializingTables] = useState(false);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   const loadConfig = async () => {
@@ -76,6 +77,21 @@ export const PostgresConfigView: React.FC = () => {
   useEffect(() => {
     loadConfig();
   }, []);
+
+  const handleInitTables = async () => {
+    try {
+      setInitializingTables(true);
+      const res = await fetchApi<{ success: boolean; message: string; activeTablesCount: number }>('/api/postgres-config/init-tables', {
+        method: 'POST',
+      });
+      showToast(res.message || `All ${res.activeTablesCount} tables initialized & verified!`, 'success');
+      await loadConfig();
+    } catch (err: any) {
+      showToast(err.message || 'Failed to initialize database tables', 'error');
+    } finally {
+      setInitializingTables(false);
+    }
+  };
 
   const handleTestConnection = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -401,6 +417,16 @@ GEMINI_API_KEY=
           </button>
 
           <button
+            onClick={handleInitTables}
+            disabled={initializingTables}
+            className="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+            title="Initialize and verify all PostgreSQL database tables and default schema"
+          >
+            <Database className={`w-3.5 h-3.5 ${initializingTables ? 'animate-spin' : ''}`} />
+            <span>{initializingTables ? 'Initializing...' : 'Init / Sync DB Tables'}</span>
+          </button>
+
+          <button
             onClick={handleRunVacuum}
             disabled={vacuuming}
             className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition cursor-pointer"
@@ -643,6 +669,17 @@ GEMINI_API_KEY=
                 <span className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold font-mono">
                   {totalRecords.toLocaleString()} Total Records
                 </span>
+              </div>
+
+              {/* Automatic Schema Management Banner */}
+              <div className="p-3.5 bg-blue-50/70 border border-blue-200/80 rounded-xl flex items-start gap-3">
+                <ShieldCheck className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                <div className="text-xs text-slate-700 space-y-1">
+                  <p className="font-bold text-slate-900">Automatic Schema Provisioning Enabled</p>
+                  <p className="text-slate-600 leading-relaxed">
+                    AssetFlow automatically detects if tables exist on startup and runs all necessary <code className="font-mono bg-blue-100 text-blue-800 px-1 py-0.5 rounded text-[11px]">CREATE TABLE IF NOT EXISTS</code> migrations and relational indexes. If you ever point AssetFlow to a fresh PostgreSQL instance, click <strong>Init / Sync DB Tables</strong> to immediately instantiate the schema.
+                  </p>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

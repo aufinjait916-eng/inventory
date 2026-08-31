@@ -66,12 +66,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
       roles: ['admin', 'super_manager'],
     },
     {
-      id: 'department_portal',
-      label: 'Employee Kiosk (PIN)',
-      icon: KeyRound,
-      roles: ['admin', 'super_manager', 'manager', 'department'],
-    },
-    {
       id: 'requests',
       label: 'Approvals & Issue',
       icon: ClipboardList,
@@ -91,15 +85,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
       badge: dashboardStats?.activeRepairsCount ? dashboardStats.activeRepairsCount : undefined,
       roles: ['admin', 'super_manager', 'manager'],
     },
-    {
-      id: 'organization',
-      label: 'Branches & Personnel',
-      icon: Building2,
-      roles: ['admin', 'super_manager', 'manager'],
-    },
   ];
 
   const configurationItems: { id: NavTab; label: string; icon: React.ElementType; roles: UserRole[] }[] = [
+    {
+      id: 'organization',
+      label: 'Branch & Personnel',
+      icon: Building2,
+      roles: ['admin', 'super_manager', 'manager'],
+    },
+    {
+      id: 'department_portal',
+      label: 'Employee Kiosk (PIN)',
+      icon: KeyRound,
+      roles: ['admin', 'super_manager', 'manager', 'department'],
+    },
     {
       id: 'categories_fields',
       label: 'Categories & Fields',

@@ -31,6 +31,7 @@ import {
 import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 import { authMiddleware, AuthRequest } from './src/middleware/auth.ts';
 import { seedDatabase } from './src/db/seed.ts';
+import { initializeDatabaseSchema, SCHEMA_TABLES } from './src/db/initDb.ts';
 
 dotenv.config();
 
@@ -40,8 +41,10 @@ async function startServer() {
 
   app.use(express.json({ limit: '25mb' }));
 
-  // Initialize DB seed on startup (safe, skips if already populated)
-  seedDatabase().catch((err) => console.error('Seed error:', err));
+  // Auto-initialize PostgreSQL database schema, tables, indexes, and seed default data on startup
+  initializeDatabaseSchema()
+    .then((res) => console.log(`[PostgreSQL] Startup schema verification: ${res.message}`))
+    .catch((err) => console.error('[PostgreSQL] Startup schema initialization error:', err));
 
   // Helper function for entry logging
   async function logEntry(
@@ -2871,6 +2874,56 @@ async function startServer() {
     } catch (error: any) {
       console.error('Vacuum error:', error);
       res.status(500).json({ error: error.message || 'Failed to run database vacuum' });
+    }
+  });
+
+  // Explicitly trigger schema & table initialization / migration
+  app.post('/api/postgres-config/init-tables', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      if (req.user?.role !== 'admin') {
+        return res.status(403).json({ error: 'Access Denied: Administrator role required.' });
+      }
+
+      const initResult = await initializeDatabaseSchema();
+      await logEntry(req, 'INIT_DATABASE_TABLES', 'SYSTEM_DATABASE', '0', `Database tables initialized/verified (${initResult.existingTablesCount} tables active)`);
+
+      if (!initResult.success) {
+        return res.status(500).json({ success: false, error: initResult.message });
+      }
+
+      res.json({
+        success: true,
+        message: initResult.message,
+        activeTablesCount: initResult.existingTablesCount,
+      });
+    } catch (error: any) {
+      console.error('Error initializing tables:', error);
+      res.status(500).json({ success: false, error: error.message || 'Failed to initialize database tables' });
+    }
+  });
+
+  // Inspect database schema status
+  app.get('/api/postgres-config/schema-status', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const tableCheckRes = await pool.query(`
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+          AND table_type = 'BASE TABLE';
+      `);
+      const existingTables = tableCheckRes.rows.map((r: any) => r.table_name);
+      const missingTables = SCHEMA_TABLES.filter((t) => !existingTables.includes(t));
+
+      res.json({
+        totalExpected: SCHEMA_TABLES.length,
+        totalExisting: existingTables.length,
+        isComplete: missingTables.length === 0,
+        existingTables,
+        missingTables,
+      });
+    } catch (error: any) {
+      console.error('Error checking schema status:', error);
+      res.status(500).json({ error: error.message || 'Failed to check schema status' });
     }
   });
 

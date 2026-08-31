@@ -68,7 +68,17 @@ This guide provides instructions to publish AssetFlow to GitHub, build the conta
 
 ---
 
-## 🛡️ 3. Recommended PostgreSQL Data Backup Strategy on TrueNAS
+## 🔄 3. Automatic Database Schema & Table Initialization
+
+When AssetFlow boots up on TrueNAS:
+- It automatically connects to the configured PostgreSQL instance.
+- It executes `CREATE TABLE IF NOT EXISTS` and `CREATE INDEX IF NOT EXISTS` across all enterprise tables (assets, categories, requests, transfers, users, audit logs, etc.).
+- If the database is blank, it seeds default administrative and structural records.
+- You can also manually trigger schema verification at any time from the **Configuration** &rarr; **PostgreSQL Server** screen using the **"Init / Sync DB Tables"** button.
+
+---
+
+## 🛡️ 4. Recommended PostgreSQL Data Backup Strategy on TrueNAS
 
 TrueNAS uses **ZFS**, making database backups simple and safe:
 
