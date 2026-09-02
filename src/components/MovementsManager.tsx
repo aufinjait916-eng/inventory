@@ -80,7 +80,7 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
       const [movData, pendingData, invData, branchData, locData] = await Promise.all([
         fetchApi<Movement[]>(`/api/movements?branchId=${currentBranchId}`),
         fetchApi<Movement[]>(`/api/movements/pending?branchId=${currentBranchId}`),
-        fetchApi<InventoryItem[]>(`/api/inventory?all=true&branchId=${currentBranchId}`),
+        fetchApi<InventoryItem[]>(`/api/inventory?branchId=${currentBranchId}`),
         fetchApi<Branch[]>('/api/branches'),
         fetchApi<LocationItem[]>(`/api/locations?branchId=${currentBranchId}`),
       ]);

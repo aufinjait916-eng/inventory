@@ -12,6 +12,7 @@ interface SearchableItemSelectProps {
   disabled?: boolean;
   filterType?: 'all' | 'asset' | 'consumable';
   showEngagementInfo?: boolean;
+  hideQuantity?: boolean;
   id?: string;
 }
 
@@ -25,6 +26,7 @@ export const SearchableItemSelect: React.FC<SearchableItemSelectProps> = ({
   disabled = false,
   filterType = 'all',
   showEngagementInfo = false,
+  hideQuantity = false,
   id = 'searchable-item-select',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -132,7 +134,7 @@ export const SearchableItemSelect: React.FC<SearchableItemSelectProps> = ({
             {label} {required && <span className="text-red-500">*</span>}
           </label>
           <span className="text-[11px] text-slate-400 font-medium">
-            {safeItems.length} items available
+            {safeItems.length} {hideQuantity ? 'items listed' : 'items available'}
           </span>
         </div>
       )}
@@ -162,9 +164,11 @@ export const SearchableItemSelect: React.FC<SearchableItemSelectProps> = ({
               />
               <span className="font-mono text-slate-500 font-semibold shrink-0">[{selectedItem.code}]</span>
               <span className="truncate">{selectedItem.name}</span>
-              <span className="text-[11px] font-normal text-slate-500 ml-1 shrink-0">
-                ({selectedItem.availableQuantity} {selectedItem.uom})
-              </span>
+              {!hideQuantity && (
+                <span className="text-[11px] font-normal text-slate-500 ml-1 shrink-0">
+                  ({selectedItem.availableQuantity} {selectedItem.uom})
+                </span>
+              )}
             </div>
           )}
 
@@ -352,15 +356,27 @@ export const SearchableItemSelect: React.FC<SearchableItemSelectProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0 text-right">
-                      <div>
-                        <p className="font-bold text-slate-900 font-mono text-xs">
-                          {item.availableQuantity}{' '}
-                          <span className="text-[10px] uppercase font-semibold text-slate-500 font-sans">
-                            {item.uom}
-                          </span>
-                        </p>
-                        <p className="text-[10px] text-slate-400">Available</p>
-                      </div>
+                      {!hideQuantity ? (
+                        <div>
+                          <p className="font-bold text-slate-900 font-mono text-xs">
+                            {item.availableQuantity}{' '}
+                            <span className="text-[10px] uppercase font-semibold text-slate-500 font-sans">
+                              {item.uom}
+                            </span>
+                          </p>
+                          <p className="text-[10px] text-slate-400">Available</p>
+                        </div>
+                      ) : (
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${
+                            item.itemType === 'asset'
+                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                              : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          }`}
+                        >
+                          {item.itemType}
+                        </span>
+                      )}
 
                       {isSelected && <Check className="w-4 h-4 text-blue-600 shrink-0" />}
                     </div>

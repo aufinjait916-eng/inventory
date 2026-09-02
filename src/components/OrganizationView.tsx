@@ -42,6 +42,12 @@ export const OrganizationView: React.FC = () => {
     'employees'
   );
 
+  useEffect(() => {
+    if (currentRole === 'manager' && (activeTab === 'managers' || activeTab === 'branches')) {
+      setActiveTab('employees');
+    }
+  }, [currentRole, activeTab]);
+
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [machines, setMachines] = useState<Machine[]>([]);
@@ -673,7 +679,7 @@ export const OrganizationView: React.FC = () => {
         branchId: isGlobalRole ? null : (userBranchId ? Number(userBranchId) : null),
         departmentId: isGlobalRole ? null : (userDeptId ? Number(userDeptId) : null),
         isActive: userActive,
-        assignedCategoryIds: userRole === 'manager' ? userAssignedCategoryIds : undefined,
+        assignedCategoryIds: (userRole === 'manager' || userRole === 'department') ? userAssignedCategoryIds : undefined,
       };
 
       if (userPassword && userPassword.trim()) {
@@ -773,15 +779,17 @@ export const OrganizationView: React.FC = () => {
             <Users className="w-3.5 h-3.5 text-blue-600" />
             <span>Employees ({employees.length})</span>
           </button>
-          <button
-            onClick={() => setActiveTab('managers')}
-            className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
-              activeTab === 'managers' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
-            <span>Users ({systemUsers.length})</span>
-          </button>
+          {currentRole !== 'manager' && (
+            <button
+              onClick={() => setActiveTab('managers')}
+              className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                activeTab === 'managers' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <UserCheck className="w-3.5 h-3.5 text-indigo-600" />
+              <span>Users ({systemUsers.length})</span>
+            </button>
+          )}
           <button
             onClick={() => setActiveTab('departments')}
             className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
@@ -809,15 +817,17 @@ export const OrganizationView: React.FC = () => {
             <Wrench className="w-3.5 h-3.5 text-indigo-600" />
             <span>Machines ({machines.length})</span>
           </button>
-          <button
-            onClick={() => setActiveTab('branches')}
-            className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
-              activeTab === 'branches' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Building2 className="w-3.5 h-3.5 text-violet-600" />
-            <span>Branches ({allBranches.length})</span>
-          </button>
+          {currentRole !== 'manager' && (
+            <button
+              onClick={() => setActiveTab('branches')}
+              className={`px-3 py-1.5 rounded-lg font-bold transition flex items-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                activeTab === 'branches' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Building2 className="w-3.5 h-3.5 text-violet-600" />
+              <span>Branches ({allBranches.length})</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1112,8 +1122,8 @@ export const OrganizationView: React.FC = () => {
                         </div>
                       )}
 
-                      {/* Assigned Category Visibility (for Managers) */}
-                      {u.role === 'manager' && (
+                      {/* Assigned Category Visibility (for Managers & Department Users) */}
+                      {(u.role === 'manager' || u.role === 'department') && (
                         <div className="pt-2 border-t border-slate-200/80 space-y-1.5">
                           <div className="flex items-center justify-between text-[11px]">
                             <span className="text-slate-500 flex items-center gap-1 font-semibold">
@@ -1147,7 +1157,7 @@ export const OrganizationView: React.FC = () => {
                   </div>
 
                   {/* Admin Quick Category Assignment Action */}
-                  {currentRole === 'admin' && u.role === 'manager' && (
+                  {currentRole === 'admin' && (u.role === 'manager' || u.role === 'department') && (
                     <div className="pt-2 border-t border-slate-200/80">
                       <button
                         type="button"
@@ -2062,8 +2072,8 @@ export const OrganizationView: React.FC = () => {
                 </div>
               )}
 
-              {/* Category Assignment Section (For Managers) */}
-              {userRole === 'manager' && (
+              {/* Category Assignment Section (For Managers & Department Users) */}
+              {(userRole === 'manager' || userRole === 'department') && (
                 <div className="p-3 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2">
                   <div className="flex items-center justify-between">
                     <label className="font-bold text-indigo-950 flex items-center gap-1.5">
@@ -2090,7 +2100,9 @@ export const OrganizationView: React.FC = () => {
                   </div>
 
                   <p className="text-[10px] text-indigo-700 leading-tight">
-                    Managers will only have visibility into stock items, models, and requests belonging to these assigned categories.
+                    {userRole === 'department'
+                      ? 'Department users will only be able to request and search materials belonging to these assigned categories.'
+                      : 'Managers will only have visibility into stock items, models, and requests belonging to these assigned categories.'}
                   </p>
 
                   <div className="grid grid-cols-2 gap-1.5 max-h-36 overflow-y-auto pr-1 bg-white p-2 rounded-lg border border-indigo-100">

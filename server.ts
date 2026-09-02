@@ -79,8 +79,8 @@ async function startServer() {
     if (req.user.role === 'admin' || req.user.role === 'super_manager') {
       return null;
     }
-    // Managers are restricted to their assigned categories if explicitly configured
-    if (req.user.role === 'manager') {
+    // Managers & Department users are restricted to their assigned categories if explicitly configured
+    if (req.user.role === 'manager' || req.user.role === 'department') {
       const userId = req.user.id;
       if (!userId) return null;
       const perms = await db.select().from(userCategoryPermissions).where(

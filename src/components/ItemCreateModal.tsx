@@ -13,9 +13,6 @@ import {
   CheckCircle2,
   FileText,
   Image as ImageIcon,
-  Upload,
-  Trash2,
-  Link as LinkIcon,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.tsx';
 import { fetchApi } from '../lib/api.ts';
@@ -58,7 +55,6 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
   const [recordDate, setRecordDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [notes, setNotes] = useState('');
   const [imageUrl, setImageUrl] = useState<string>('');
-  const [showUrlInput, setShowUrlInput] = useState<boolean>(false);
 
   // Initial Storage Destination
   const [selectedBranchId, setSelectedBranchId] = useState<number>(currentBranchId);
@@ -154,52 +150,6 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
     const rand = Math.floor(1000 + Math.random() * 9000);
     const catCode = categories.find((c) => c.id === categoryId)?.code || 'GEN';
     setCode(`${prefix}-${catCode}-${rand}`);
-  };
-
-  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      showToast('Please select a valid image file (PNG, JPG, WEBP, GIF)', 'error');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const rawDataUrl = event.target?.result as string;
-      const img = new Image();
-      img.onload = () => {
-        const maxDim = 800;
-        let width = img.width;
-        let height = img.height;
-        if (width > maxDim || height > maxDim) {
-          if (width > height) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          } else {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          const compressed = canvas.toDataURL('image/jpeg', 0.85);
-          setImageUrl(compressed);
-        } else {
-          setImageUrl(rawDataUrl);
-        }
-      };
-      img.onerror = () => {
-        setImageUrl(rawDataUrl);
-      };
-      img.src = rawDataUrl;
-    };
-    reader.readAsDataURL(file);
   };
 
   const handleCustomFieldChange = (fieldName: string, value: any) => {
@@ -418,100 +368,65 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
               </div>
             </div>
 
-            {/* Item Picture / Image Upload */}
-            <div className="pt-2">
-              <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
-                <span className="flex items-center gap-1.5">
-                  <ImageIcon className="w-3.5 h-3.5 text-blue-600" />
-                  <span>Item Picture / Photo (Optional)</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setShowUrlInput(!showUrlInput)}
-                  className="text-[11px] font-semibold text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer"
-                >
-                  <LinkIcon className="w-3 h-3" />
-                  <span>{showUrlInput ? 'Switch to File Upload' : 'Enter Web Image URL'}</span>
-                </button>
-              </label>
+            {/* Model Reference Picture Display */}
+            {(() => {
+              const selectedModel = models.find((m) => m.id === modelId);
+              const previewImg = selectedModel?.imageUrl || imageUrl;
 
-              {imageUrl ? (
-                <div className="flex items-center gap-4 p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                  <div className="relative w-20 h-20 rounded-lg overflow-hidden border border-slate-300 bg-white flex items-center justify-center shrink-0">
-                    <img
-                      src={imageUrl}
-                      alt="Item preview"
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover"
-                      onError={() => {
-                        showToast('Failed to load image preview. Please check URL or file.', 'error');
-                      }}
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0 space-y-1">
-                    <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                      Picture Attached
-                    </p>
-                    <p className="text-[11px] text-slate-500 truncate max-w-sm">
-                      {imageUrl.startsWith('data:') ? 'Image uploaded from file' : imageUrl}
-                    </p>
-                    <div className="flex items-center gap-2 pt-1">
-                      <label className="text-[11px] font-bold text-blue-600 hover:text-blue-700 cursor-pointer">
-                        Replace Picture
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleImageFileChange}
-                          className="hidden"
+              return (
+                <div className="pt-2">
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5">
+                      <ImageIcon className="w-3.5 h-3.5 text-blue-600" />
+                      <span>Model Reference Picture</span>
+                    </span>
+                    {selectedModel?.imageUrl && (
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                        Inherited from Model Template
+                      </span>
+                    )}
+                  </label>
+
+                  {previewImg ? (
+                    <div className="flex items-center gap-4 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                      <div className="relative w-20 h-20 rounded-lg overflow-hidden border border-slate-300 bg-white flex items-center justify-center shrink-0 shadow-xs">
+                        <img
+                          src={previewImg}
+                          alt="Model preview"
+                          referrerPolicy="no-referrer"
+                          className="w-full h-full object-cover"
+                          onError={() => {
+                            showToast('Model template image preview could not be loaded.', 'info');
+                          }}
                         />
-                      </label>
-                      <span className="text-slate-300">•</span>
-                      <button
-                        type="button"
-                        onClick={() => setImageUrl('')}
-                        className="text-[11px] font-bold text-red-600 hover:text-red-700 flex items-center gap-1 cursor-pointer"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                        Remove Picture
-                      </button>
+                      </div>
+                      <div className="flex-1 min-w-0 space-y-1">
+                        <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                          Model Picture Displayed
+                        </p>
+                        <p className="text-[11px] text-slate-700 font-semibold truncate max-w-sm">
+                          {selectedModel?.name || 'Selected Model Template'}
+                        </p>
+                        <p className="text-[10px] text-slate-400">
+                          This inventory item automatically inherits the photograph and specifications configured on the model template.
+                        </p>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="p-3 bg-slate-50 border border-dashed border-slate-200 rounded-xl flex items-center gap-3 text-slate-400 text-xs">
+                      <ImageIcon className="w-5 h-5 text-slate-300 shrink-0" />
+                      <span>
+                        {modelId
+                          ? 'The selected model does not have a picture configured in the model catalog.'
+                          : 'Select a model above to automatically display its template photograph and specifications.'}
+                      </span>
+                    </div>
+                  )}
                 </div>
-              ) : showUrlInput ? (
-                <div className="flex gap-2">
-                  <input
-                    type="url"
-                    placeholder="https://example.com/asset-photo.jpg"
-                    value={imageUrl}
-                    onChange={(e) => setImageUrl(e.target.value)}
-                    className="flex-1 px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white font-mono"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowUrlInput(false)}
-                    className="px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 border border-slate-300 rounded-lg"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              ) : (
-                <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl cursor-pointer bg-slate-50/50 hover:bg-blue-50/30 transition group">
-                  <div className="flex items-center gap-2 text-slate-600 group-hover:text-blue-600">
-                    <Upload className="w-4 h-4 text-blue-500" />
-                    <span className="text-xs font-bold">Click to upload photo</span>
-                    <span className="text-slate-400 text-xs font-normal">or drag and drop</span>
-                  </div>
-                  <p className="text-[10px] text-slate-400 mt-1">PNG, JPG, WEBP, GIF up to 10MB</p>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageFileChange}
-                    className="hidden"
-                  />
-                </label>
-              )}
-            </div>
+              );
+            })()}
           </div>
 
           {/* Section 2: Units of Measurement & Quantity */}

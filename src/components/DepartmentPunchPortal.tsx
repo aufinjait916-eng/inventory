@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.tsx';
 import { fetchApi } from '../lib/api.ts';
+import { SearchableItemSelect } from './SearchableItemSelect.tsx';
 import {
   Employee,
   InventoryItem,
@@ -349,75 +350,23 @@ export const DepartmentPunchPortal: React.FC = () => {
           </div>
 
           <form onSubmit={handleSubmitRequest} className="space-y-5">
-            {/* Item Selection */}
+            {/* Item Selection (Searchable without quantity) */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 Select Consumable / Tool / Asset <span className="text-red-500">*</span>
               </label>
-              <select
-                required
+              <SearchableItemSelect
+                items={items}
                 value={selectedItemId}
-                onChange={(e) => {
-                  setSelectedItemId(e.target.value ? Number(e.target.value) : '');
-                }}
-                className="w-full px-3.5 py-2.5 text-xs font-semibold border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
-              >
-                <option value="">-- Choose Stock Item --</option>
-                {items.map((i) => (
-                  <option key={i.id} value={i.id}>
-                    [{i.code}] {i.name} ({i.availableQuantity} {i.uom} available in branch)
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setSelectedItemId(val)}
+                placeholder="Type or search item name, code, model..."
+                hideQuantity={true}
+                required
+              />
             </div>
 
-            {/* Selected item stock preview info */}
-            {selectedItemObj && (
-              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs flex items-center justify-between">
-                <div>
-                  <p className="font-bold text-slate-800">{selectedItemObj.name}</p>
-                  <p className="text-[11px] text-slate-500">
-                    Category: {selectedItemObj.category?.name || 'Standard'} • UOM:{' '}
-                    <span className="uppercase font-bold text-blue-600">{selectedItemObj.uom}</span>
-                  </p>
-                </div>
-                <div className="text-right">
-                  <span className="font-mono text-sm font-bold text-emerald-700">
-                    {selectedItemObj.availableQuantity} {selectedItemObj.uom}
-                  </span>
-                  <span className="block text-[10px] text-slate-400">Available Stock</span>
-                </div>
-              </div>
-            )}
-
-            {/* Department, Quantity, and Machine Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Department <span className="text-red-500">*</span>
-                </label>
-                <select
-                  required
-                  value={selectedDepartmentId}
-                  onChange={(e) => {
-                    const newDeptId = e.target.value ? Number(e.target.value) : '';
-                    setSelectedDepartmentId(newDeptId);
-                    setSelectedMachineId(''); // reset machine if dept changes
-                  }}
-                  className="w-full px-3.5 py-2.5 text-xs font-semibold border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
-                >
-                  <option value="">-- Choose Department --</option>
-                  {(verifiedEmployee.departments && verifiedEmployee.departments.length > 0
-                    ? verifiedEmployee.departments.map((d) => d.department).filter(Boolean)
-                    : departments
-                  ).map((d: any) => (
-                    <option key={d.id} value={d.id}>
-                      {d.name} ({d.code})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
+            {/* Department Context & Quantity & Machine Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Requested Quantity ({selectedItemObj?.uom || 'units'}) <span className="text-red-500">*</span>
@@ -435,7 +384,7 @@ export const DepartmentPunchPortal: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Target Machine {selectedDepartmentId ? '(In Department)' : '(Optional)'}
+                  Target Machine {currentDept ? `(${currentDept.name})` : '(Optional)'}
                 </label>
                 <select
                   value={selectedMachineId}
@@ -444,15 +393,15 @@ export const DepartmentPunchPortal: React.FC = () => {
                 >
                   <option value="">-- Direct Department Activity / None --</option>
                   {machines
-                    .filter((m) => !selectedDepartmentId || m.departmentId === Number(selectedDepartmentId))
+                    .filter((m) => !currentDepartmentId || m.departmentId === Number(currentDepartmentId))
                     .map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.name} ({m.machineCode})
                       </option>
                     ))}
                 </select>
-                {selectedDepartmentId && machines.filter((m) => m.departmentId === Number(selectedDepartmentId)).length === 0 && (
-                  <p className="text-[10px] text-slate-400 mt-1">No machines linked to this department.</p>
+                {currentDepartmentId && machines.filter((m) => m.departmentId === Number(currentDepartmentId)).length === 0 && (
+                  <p className="text-[10px] text-slate-400 mt-1">No machines linked to current department.</p>
                 )}
               </div>
             </div>
