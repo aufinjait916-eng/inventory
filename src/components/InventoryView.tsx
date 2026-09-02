@@ -230,6 +230,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onOpenTransfer, on
                 <th className="py-3 px-4">Code / SKU</th>
                 <th className="py-3 px-4">Name & Model</th>
                 <th className="py-3 px-4">Category</th>
+                <th className="py-3 px-4">Location / Sublocation</th>
                 <th className="py-3 px-4">Available Quantity & UOM</th>
                 <th className="py-3 px-4">Status & Health</th>
                 <th className="py-3 px-4">Engagement / Lifetime</th>
@@ -239,13 +240,13 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onOpenTransfer, on
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-400">
+                  <td colSpan={8} className="py-8 text-center text-slate-400">
                     Loading stock records from PostgreSQL...
                   </td>
                 </tr>
               ) : filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
                     <Boxes className="w-8 h-8 mx-auto text-slate-300 mb-2" />
                     <p className="font-semibold text-slate-600">No inventory items matched your filter criteria.</p>
                     <p className="text-xs text-slate-400 mt-1">Try resetting filters or click "+ Add Asset / Consumable".</p>
@@ -255,6 +256,11 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onOpenTransfer, on
                 filteredItems.map((item) => {
                   const isLow = item.availableQuantity <= item.minThreshold;
                   const hoursEngaged = Math.floor((item.totalEngagementMinutes || 0) / 60);
+
+                  // Extract location tags
+                  const branchStockLocs = (item.stockLocations || []).filter(
+                    (sl) => !currentBranchId || sl.branchId === currentBranchId
+                  );
 
                   return (
                     <tr key={item.id} className="hover:bg-slate-50/80 transition">
@@ -306,6 +312,36 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onOpenTransfer, on
                         <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-800 border border-slate-200">
                           {item.category?.name || 'General'}
                         </span>
+                      </td>
+
+                      <td className="py-3 px-4">
+                        {branchStockLocs.length > 0 ? (
+                          <div className="space-y-1">
+                            {branchStockLocs.slice(0, 2).map((sl, idx) => (
+                              <div key={idx} className="flex items-center gap-1.5 text-[11px]">
+                                <Building className="w-3 h-3 text-slate-400 shrink-0" />
+                                <span className="font-semibold text-slate-800">
+                                  {sl.department?.name || 'General'}:
+                                </span>
+                                <span className="text-slate-600 truncate max-w-[140px]" title={sl.location?.formattedName || sl.location?.name || 'Direct Area'}>
+                                  {sl.location?.formattedName || sl.location?.name || 'Direct Area'}
+                                </span>
+                                {sl.quantity > 0 && (
+                                  <span className="text-[10px] font-mono font-bold text-slate-500 bg-slate-100 px-1 py-0.2 rounded shrink-0">
+                                    {sl.quantity}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                            {branchStockLocs.length > 2 && (
+                              <span className="text-[10px] text-slate-400 font-medium">
+                                +{branchStockLocs.length - 2} more locations
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 text-[11px]">General Storage</span>
+                        )}
                       </td>
 
                       <td className="py-3 px-4">

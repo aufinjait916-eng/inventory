@@ -167,6 +167,8 @@ CREATE TABLE IF NOT EXISTS models (
   min_threshold REAL NOT NULL DEFAULT 5,
   manufacturer TEXT,
   description TEXT,
+  image_url TEXT,
+  custom_fields_data JSONB,
   created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
 );
 
@@ -354,6 +356,8 @@ export async function initializeDatabaseSchema(): Promise<{
 
       try {
         await pool.query(`ALTER TABLE models ADD COLUMN IF NOT EXISTS min_threshold REAL NOT NULL DEFAULT 5;`);
+        await pool.query(`ALTER TABLE models ADD COLUMN IF NOT EXISTS image_url TEXT;`);
+        await pool.query(`ALTER TABLE models ADD COLUMN IF NOT EXISTS custom_fields_data JSONB;`);
       } catch (alterErr) {
         // Handled if already exists or permission
       }

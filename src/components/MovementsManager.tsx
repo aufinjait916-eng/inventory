@@ -55,7 +55,9 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
   >('dept_to_dept');
   const [quantity, setQuantity] = useState<string>('1');
   const [toBranchId, setToBranchId] = useState<number>(currentBranchId);
+  const [fromStockLocId, setFromStockLocId] = useState<number | ''>('');
   const [fromDeptId, setFromDeptId] = useState<number | ''>('');
+  const [fromLocationId, setFromLocationId] = useState<number | ''>('');
   const [toDeptId, setToDeptId] = useState<number | ''>('');
   const [toLocationId, setToLocationId] = useState<number | ''>('');
   const [toMachineId, setToMachineId] = useState<number | ''>('');
@@ -107,16 +109,62 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
     loadMovements();
   }, [currentBranchId]);
 
-  // Sync quantity whenever selected item changes
+  // Sync source location and quantity whenever selected item changes
   const selectedItemObj = items.find((i) => i.id === selectedItemId);
+
+  const availableSourceLocations = (selectedItemObj?.stockLocations || []).filter(
+    (sl) => sl.branchId === currentBranchId && sl.quantity > 0
+  );
+
+  const currentSourceStock = (selectedItemObj?.stockLocations || []).find(
+    (sl) => sl.id === fromStockLocId
+  );
+
+  const maxAvailableQuantity = currentSourceStock?.quantity ?? (selectedItemObj?.availableQuantity || 0);
 
   useEffect(() => {
     if (selectedItemObj) {
-      if (selectedItemObj.itemType === 'asset') {
-        setQuantity('1');
+      const validLocs = (selectedItemObj.stockLocations || []).filter(
+        (sl) => sl.branchId === currentBranchId && sl.quantity > 0
+      );
+      if (validLocs.length > 0) {
+        const first = validLocs[0];
+        setFromStockLocId(first.id);
+        setFromDeptId(first.departmentId || '');
+        setFromLocationId(first.locationId || '');
+        if (selectedItemObj.itemType === 'asset') {
+          setQuantity('1');
+        } else {
+          setQuantity(first.quantity > 0 ? String(Math.min(1, first.quantity)) : '1');
+        }
+      } else {
+        setFromStockLocId('');
+        setFromDeptId('');
+        setFromLocationId('');
+        if (selectedItemObj.itemType === 'asset') {
+          setQuantity('1');
+        }
       }
     }
-  }, [selectedItemId, selectedItemObj]);
+  }, [selectedItemId, selectedItemObj, currentBranchId]);
+
+  const handleSourceLocationChange = (stockLocId: number | '') => {
+    setFromStockLocId(stockLocId);
+    if (!stockLocId) {
+      setFromDeptId('');
+      setFromLocationId('');
+      return;
+    }
+    const matched = (selectedItemObj?.stockLocations || []).find((sl) => sl.id === stockLocId);
+    if (matched) {
+      setFromDeptId(matched.departmentId || '');
+      setFromLocationId(matched.locationId || '');
+      if (selectedItemObj?.itemType === 'consumable' && matched.quantity > 0) {
+        setQuantity(String(Math.min(parseFloat(quantity) || 1, matched.quantity)));
+      }
+    }
+  };
+
   useEffect(() => {
     async function loadBranchEntities() {
       try {
@@ -142,18 +190,33 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
       return;
     }
 
+    const qtyNum = parseFloat(quantity);
+    if (isNaN(qtyNum) || qtyNum <= 0) {
+      showToast('Please enter a valid transfer quantity greater than 0', 'error');
+      return;
+    }
+
+    if (qtyNum > maxAvailableQuantity && maxAvailableQuantity > 0) {
+      showToast(
+        `Quantity (${qtyNum}) exceeds available stock in chosen source (${maxAvailableQuantity} ${selectedItemObj?.uom || 'units'})`,
+        'error'
+      );
+      return;
+    }
+
     try {
       setSubmitting(true);
       await fetchApi('/api/movements', {
         method: 'POST',
         body: JSON.stringify({
           itemId: Number(selectedItemId),
-          quantity: parseFloat(quantity),
+          quantity: qtyNum,
           uom: selectedItemObj?.uom || 'unit',
           movementType,
           fromBranchId: currentBranchId,
           toBranchId: movementType === 'branch_to_branch' ? Number(toBranchId) : currentBranchId,
           fromDepartmentId: fromDeptId ? Number(fromDeptId) : null,
+          fromLocationId: fromLocationId ? Number(fromLocationId) : null,
           toDepartmentId: movementType === 'branch_to_branch' ? null : toDeptId ? Number(toDeptId) : null,
           toLocationId: movementType === 'branch_to_branch' ? null : toLocationId ? Number(toLocationId) : null,
           toMachineId: movementType === 'branch_to_branch' ? null : toMachineId ? Number(toMachineId) : null,
@@ -433,14 +496,39 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                       </td>
 
                       <td className="py-3 px-4">
-                        <div className="flex items-center gap-2 text-xs">
-                          <span className="font-medium text-slate-700">
-                            {mov.fromDepartment?.name || mov.fromBranch?.name || 'Central Store'}
-                          </span>
-                          <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
-                          <span className="font-bold text-blue-900">
-                            {mov.toDepartment?.name || mov.toBranch?.name || 'Assigned Location'}
-                          </span>
+                        <div className="flex flex-col gap-1 text-xs">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-semibold text-slate-800">
+                              {mov.movementType === 'branch_to_branch'
+                                ? `${mov.fromBranch?.name || `Branch #${mov.fromBranchId}`}${
+                                    mov.fromDepartment ? ` (${mov.fromDepartment.name})` : ''
+                                  }`
+                                : mov.fromDepartment?.name || mov.fromBranch?.name || 'Central Store'}
+                            </span>
+                            <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span className="font-bold text-blue-900">
+                              {mov.movementType === 'branch_to_branch'
+                                ? mov.toDepartment
+                                  ? `${mov.toBranch?.name || `Branch #${mov.toBranchId}`} (${mov.toDepartment.name})`
+                                  : isPending
+                                  ? `${mov.toBranch?.name || `Branch #${mov.toBranchId}`} (Awaiting Acceptance)`
+                                  : mov.toBranch?.name || `Branch #${mov.toBranchId}`
+                                : mov.toDepartment?.name || mov.toBranch?.name || 'Assigned Location'}
+                            </span>
+                          </div>
+                          {(mov.fromLocation || mov.toLocation || mov.toMachine) && (
+                            <div className="text-[10px] text-slate-500 flex items-center gap-2 flex-wrap">
+                              {mov.fromLocation && (
+                                <span>From Loc: <strong className="text-slate-700">{mov.fromLocation.name}</strong></span>
+                              )}
+                              {mov.toLocation && (
+                                <span>To Loc: <strong className="text-slate-700">{mov.toLocation.name}</strong></span>
+                              )}
+                              {mov.toMachine && (
+                                <span>Machine: <strong className="text-slate-700">{mov.toMachine.name}</strong></span>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </td>
 
@@ -678,7 +766,55 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                 </div>
               </div>
 
-              {/* Quantity and Target Branch */}
+              {/* Source Storage Location with Available Quantity */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+                    <span>Source Storage Location & Department</span>
+                    <span className="text-red-500">*</span>
+                  </label>
+                  {selectedItemObj && (
+                    <span className="text-[11px] font-bold text-slate-600">
+                      Total in Branch: <strong className="text-blue-700">{selectedItemObj.availableQuantity || 0}</strong> {selectedItemObj.uom}
+                    </span>
+                  )}
+                </div>
+
+                {availableSourceLocations.length > 0 ? (
+                  <select
+                    value={fromStockLocId}
+                    onChange={(e) => handleSourceLocationChange(e.target.value ? Number(e.target.value) : '')}
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white font-medium"
+                    required
+                  >
+                    {availableSourceLocations.map((sl) => {
+                      const deptName = sl.department?.name || 'General / Central Store';
+                      const locName = (sl.location as any)?.formattedName || sl.location?.name || 'Default Storage Shelf';
+                      return (
+                        <option key={sl.id} value={sl.id}>
+                          {deptName} ➔ {locName} (Available: {sl.quantity} {selectedItemObj?.uom || 'units'})
+                        </option>
+                      );
+                    })}
+                  </select>
+                ) : (
+                  <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-800">
+                    No active stock locations with available quantity found for this item in the current branch.
+                  </div>
+                )}
+
+                {currentSourceStock && (
+                  <div className="flex items-center justify-between text-[11px] text-slate-600 bg-white px-2.5 py-1.5 rounded-md border border-slate-200">
+                    <span>Selected Bin Available Stock:</span>
+                    <span className="font-bold text-emerald-700">
+                      {currentSourceStock.quantity} {selectedItemObj?.uom || 'units'}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Quantity and Target Branch / Dept */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -693,7 +829,7 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                         className="w-full px-3 py-2 text-xs font-mono font-bold border border-slate-300 rounded-xl bg-slate-100 text-slate-700 cursor-not-allowed"
                       />
                       <p className="text-[10px] text-blue-600 font-semibold mt-1">
-                        Each asset has quantity as 1 only
+                        Assets are moved as 1 unit per transfer
                       </p>
                     </div>
                   ) : (
@@ -702,6 +838,7 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                         type="number"
                         step="any"
                         min="0.01"
+                        max={maxAvailableQuantity > 0 ? maxAvailableQuantity : undefined}
                         required
                         placeholder="e.g. 5"
                         value={quantity}
@@ -709,7 +846,7 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                         className="w-full px-3 py-2 text-xs font-mono font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
                       />
                       <p className="text-[10px] text-slate-500 mt-1">
-                        Consumable stock quantity can be adjusted freely
+                        Max transferable from chosen bin: {maxAvailableQuantity} {selectedItemObj?.uom || 'units'}
                       </p>
                     </div>
                   )}
@@ -723,7 +860,7 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                     <select
                       value={toBranchId}
                       onChange={(e) => setToBranchId(Number(e.target.value))}
-                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white font-medium"
                     >
                       {allBranches
                         .filter((b) => b.id !== currentBranchId)
@@ -736,13 +873,13 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                   </div>
                 ) : (
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Source Department</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Target Department</label>
                     <select
-                      value={fromDeptId}
-                      onChange={(e) => setFromDeptId(e.target.value ? Number(e.target.value) : '')}
+                      value={toDeptId}
+                      onChange={(e) => setToDeptId(e.target.value ? Number(e.target.value) : '')}
                       className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
                     >
-                      <option value="">-- Central Store / General --</option>
+                      <option value="">-- Direct Store / General --</option>
                       {departments.map((d) => (
                         <option key={d.id} value={d.id}>
                           {d.name}
@@ -761,23 +898,23 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                     <span>Manager Acceptance Workflow</span>
                   </div>
                   <p className="text-blue-800 text-[11px]">
-                    Target department and storage location are not required now. The destination Manager will receive a notification to review and accept this item into their department and storage bins.
+                    The destination branch manager will receive a transfer notification and will allocate the stock to their branch department and storage location upon physical receipt.
                   </p>
                 </div>
               ) : (
                 /* Department, Location and Machine Picker for Intra-Branch */
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Target Department</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Target Storage Sublocation</label>
                     <select
-                      value={toDeptId}
-                      onChange={(e) => setToDeptId(e.target.value ? Number(e.target.value) : '')}
+                      value={toLocationId}
+                      onChange={(e) => setToLocationId(e.target.value ? Number(e.target.value) : '')}
                       className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
                     >
-                      <option value="">-- Direct Store / General --</option>
-                      {departments.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.name}
+                      <option value="">-- General Storage Shelf --</option>
+                      {targetLocations.map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.name} {l.parentLocationId ? '(Sublocation)' : ''}
                         </option>
                       ))}
                     </select>

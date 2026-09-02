@@ -1420,7 +1420,7 @@ async function startServer() {
 
   app.post('/api/models', authMiddleware, async (req: AuthRequest, res) => {
     try {
-      const { categoryId, fieldSetId, name, modelNumber, minThreshold, manufacturer, description } = req.body;
+      const { categoryId, fieldSetId, name, modelNumber, minThreshold, manufacturer, description, imageUrl, customFieldsData } = req.body;
       if (!categoryId || !name || !modelNumber) {
         return res.status(400).json({ error: 'Category, name, and model number are required' });
       }
@@ -1433,6 +1433,8 @@ async function startServer() {
         minThreshold: minThreshold !== undefined && minThreshold !== null ? parseFloat(minThreshold) : 5,
         manufacturer: manufacturer || null,
         description: description || null,
+        imageUrl: imageUrl || null,
+        customFieldsData: customFieldsData || {},
       }).returning();
 
       await logEntry(req, 'CREATE_MODEL', 'model', created.id, `Created model ${name} (${modelNumber}) under category #${categoryId}`);
@@ -1446,7 +1448,7 @@ async function startServer() {
   app.put('/api/models/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { categoryId, fieldSetId, name, modelNumber, minThreshold, manufacturer, description } = req.body;
+      const { categoryId, fieldSetId, name, modelNumber, minThreshold, manufacturer, description, imageUrl, customFieldsData } = req.body;
       const [updated] = await db.update(models)
         .set({
           categoryId: categoryId ? parseInt(categoryId) : undefined,
@@ -1456,6 +1458,8 @@ async function startServer() {
           minThreshold: minThreshold !== undefined && minThreshold !== null ? parseFloat(minThreshold) : undefined,
           manufacturer: manufacturer !== undefined ? manufacturer : undefined,
           description: description !== undefined ? description : undefined,
+          imageUrl: imageUrl !== undefined ? imageUrl : undefined,
+          customFieldsData: customFieldsData !== undefined ? customFieldsData : undefined,
         })
         .where(eq(models.id, id))
         .returning();
@@ -1773,7 +1777,7 @@ async function startServer() {
         items = items.filter(i => i.name.toLowerCase().includes(s) || i.code.toLowerCase().includes(s));
       }
 
-      // Fetch stock location breakdowns
+      // Fetch stock location breakdowns & lookup maps
       const allStockLocs = await db.select().from(stockLocations);
       const allCategories = await db.select().from(categories);
       const catMap = new Map(allCategories.map(c => [c.id, c]));
@@ -1781,10 +1785,38 @@ async function startServer() {
       const modelMap = new Map(allModels.map(m => [m.id, m]));
       const allVendors = await db.select().from(vendors);
       const vendorMap = new Map(allVendors.map(v => [v.id, v]));
+      const allDepts = await db.select().from(departments);
+      const deptMap = new Map(allDepts.map(d => [d.id, d]));
+      const allLocations = await db.select().from(locations);
+      const locMap = new Map(allLocations.map(l => [l.id, l]));
+      const allMachines = await db.select().from(machines);
+      const machMap = new Map(allMachines.map(m => [m.id, m]));
+
+      // Function to format hierarchical location (e.g. Cupboard/Shelf1)
+      const formatLocationName = (locId: number | null) => {
+        if (!locId) return null;
+        const loc = locMap.get(locId);
+        if (!loc) return null;
+        if (loc.parentLocationId) {
+          const parent = locMap.get(loc.parentLocationId);
+          return parent ? `${parent.name}/${loc.name}` : loc.name;
+        }
+        return loc.name;
+      };
 
       // If branch filter applied, compute branch-specific quantities
-      const enriched = items.map(item => {
-        const locs = allStockLocs.filter(l => l.itemId === item.id);
+      let enriched = items.map(item => {
+        const rawLocs = allStockLocs.filter(l => l.itemId === item.id);
+        const locs = rawLocs.map(sl => ({
+          ...sl,
+          department: sl.departmentId ? deptMap.get(sl.departmentId) || null : null,
+          location: sl.locationId ? {
+            ...locMap.get(sl.locationId),
+            formattedName: formatLocationName(sl.locationId)
+          } : null,
+          machine: sl.machineId ? machMap.get(sl.machineId) || null : null,
+        }));
+
         const branchLocs = targetBranch ? locs.filter(l => l.branchId === targetBranch) : locs;
         const branchQty = branchLocs.reduce((acc, cur) => acc + cur.quantity, 0);
 
@@ -1814,6 +1846,16 @@ async function startServer() {
           stockLocations: locs,
         };
       });
+
+      // If a specific branch is selected, filter to items with available stock in that branch
+      if (targetBranch && all !== 'true') {
+        enriched = enriched.filter(item => (item.branchQuantity || 0) > 0 && item.status !== 'trashed');
+      }
+
+      // Department login: only items with available stock > 0 and not trashed
+      if (req.user?.role === 'department') {
+        enriched = enriched.filter(item => (item.branchQuantity || 0) > 0 && item.status !== 'trashed');
+      }
 
       res.json(enriched);
     } catch (error: any) {
@@ -2123,33 +2165,45 @@ async function startServer() {
       const isAsset = item.itemType === 'asset';
       const qty = isAsset ? 1 : (parseFloat(quantity) || 1);
 
-      // Deduct from source stock location
-      const sourceLocations = await db.select().from(stockLocations).where(
-        and(
-          eq(stockLocations.itemId, item.id),
-          eq(stockLocations.branchId, parseInt(fromBranchId)),
-          fromDepartmentId ? eq(stockLocations.departmentId, parseInt(fromDepartmentId)) : sql`1=1`
-        )
-      );
+      // Deduct from exact source stock location
+      let sourceLoc = null;
+      if (fromLocationId) {
+        const matchingLocs = await db.select().from(stockLocations).where(
+          and(
+            eq(stockLocations.itemId, item.id),
+            eq(stockLocations.branchId, parseInt(fromBranchId)),
+            eq(stockLocations.locationId, parseInt(fromLocationId)),
+            fromDepartmentId ? eq(stockLocations.departmentId, parseInt(fromDepartmentId)) : sql`1=1`
+          )
+        );
+        sourceLoc = matchingLocs.find(l => l.quantity >= qty) || matchingLocs[0];
+      }
 
-      const sourceLoc = sourceLocations[0];
-      if (sourceLoc && sourceLoc.quantity >= qty) {
-        await db.update(stockLocations)
-          .set({ quantity: sourceLoc.quantity - qty })
-          .where(eq(stockLocations.id, sourceLoc.id));
-      } else {
-        // Fallback: search any stock location for this item in this branch
+      if (!sourceLoc && fromDepartmentId) {
+        const deptLocs = await db.select().from(stockLocations).where(
+          and(
+            eq(stockLocations.itemId, item.id),
+            eq(stockLocations.branchId, parseInt(fromBranchId)),
+            eq(stockLocations.departmentId, parseInt(fromDepartmentId))
+          )
+        );
+        sourceLoc = deptLocs.find(l => l.quantity >= qty) || deptLocs[0];
+      }
+
+      if (!sourceLoc) {
         const anyBranchLoc = await db.select().from(stockLocations).where(
           and(
             eq(stockLocations.itemId, item.id),
             eq(stockLocations.branchId, parseInt(fromBranchId))
           )
         );
-        if (anyBranchLoc[0] && anyBranchLoc[0].quantity >= qty) {
-          await db.update(stockLocations)
-            .set({ quantity: anyBranchLoc[0].quantity - qty })
-            .where(eq(stockLocations.id, anyBranchLoc[0].id));
-        }
+        sourceLoc = anyBranchLoc.find(l => l.quantity >= qty) || anyBranchLoc[0];
+      }
+
+      if (sourceLoc) {
+        await db.update(stockLocations)
+          .set({ quantity: Math.max(0, sourceLoc.quantity - qty) })
+          .where(eq(stockLocations.id, sourceLoc.id));
       }
 
       const isInterBranch = (movementType === 'branch_to_branch') && (parseInt(fromBranchId) !== parseInt(toBranchId));
@@ -2456,6 +2510,7 @@ async function startServer() {
   app.post('/api/requests', async (req, res) => {
     try {
       const {
+        employeeId,
         securityPinEntered,
         branchId,
         departmentId,
@@ -2466,23 +2521,31 @@ async function startServer() {
         machineId,
       } = req.body;
 
-      if (!securityPinEntered || securityPinEntered.length !== 4) {
-        return res.status(400).json({ error: '4-digit employee security PIN code is required' });
-      }
       if (!branchId || !departmentId || !itemId || !requestedQty || !reasonText) {
         return res.status(400).json({ error: 'Branch, department, item, quantity, and reason are required' });
       }
 
-      // Verify employee
-      const [emp] = await db.select().from(employees).where(
-        and(
-          eq(employees.userCode, securityPinEntered),
-          eq(employees.isActive, true)
-        )
-      );
+      let emp: any = null;
+      if (employeeId) {
+        const [foundEmp] = await db.select().from(employees).where(
+          and(
+            eq(employees.id, parseInt(employeeId)),
+            eq(employees.isActive, true)
+          )
+        );
+        emp = foundEmp;
+      } else if (securityPinEntered && securityPinEntered.length === 4) {
+        const [foundEmp] = await db.select().from(employees).where(
+          and(
+            eq(employees.userCode, securityPinEntered),
+            eq(employees.isActive, true)
+          )
+        );
+        emp = foundEmp;
+      }
 
       if (!emp) {
-        return res.status(401).json({ error: 'Security PIN verification failed. No active employee with this 4-digit code.' });
+        return res.status(401).json({ error: 'Employee verification failed. Please select an active employee or verify your PIN.' });
       }
 
       const [item] = await db.select().from(inventoryItems).where(eq(inventoryItems.id, parseInt(itemId)));

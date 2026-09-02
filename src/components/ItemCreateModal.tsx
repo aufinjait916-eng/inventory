@@ -109,7 +109,7 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
     loadMeta();
   }, [isOpen, itemType, selectedBranchId]);
 
-  // When model changes, fetch / extract custom fields defined in that model's field set
+  // When model changes, fetch / extract custom fields defined in that model's field set & prefill model image
   useEffect(() => {
     if (!modelId) {
       setActiveFieldSet(null);
@@ -119,13 +119,19 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
 
     const selectedModel = models.find((m) => m.id === modelId);
     if (selectedModel) {
+      // Auto-prefill image from model if available
+      if (selectedModel.imageUrl) {
+        setImageUrl(selectedModel.imageUrl);
+      }
+
       if (selectedModel.fieldSet) {
         setActiveFieldSet(selectedModel.fieldSet);
-        // Initialize default values
+        // Initialize values from model's saved customFieldsData or field defaults
         const initialData: Record<string, any> = {};
+        const modelSavedData = selectedModel.customFieldsData || {};
         if (selectedModel.fieldSet.fields) {
           selectedModel.fieldSet.fields.forEach((f) => {
-            initialData[f.name] = f.defaultValue || '';
+            initialData[f.name] = modelSavedData[f.name] !== undefined ? modelSavedData[f.name] : (f.defaultValue || '');
           });
         }
         setCustomFieldsData(initialData);
@@ -583,104 +589,47 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
 
           {/* Section 3: Dynamic Custom Fields from Field Set */}
           {activeFieldSet && activeFieldSet.fields && activeFieldSet.fields.length > 0 && (
-            <div className="p-4 bg-indigo-50/50 rounded-xl border border-indigo-200/80 space-y-3">
+            <div className="p-4 bg-indigo-50/60 rounded-xl border border-indigo-200/80 space-y-3">
               <div className="flex items-center justify-between border-b border-indigo-100 pb-2">
                 <div>
-                  <h4 className="text-xs font-bold text-indigo-900 uppercase tracking-wider">
-                    Model Custom Fields: {activeFieldSet.name}
+                  <h4 className="text-xs font-bold text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>Model Specifications: {activeFieldSet.name}</span>
                   </h4>
-                  <p className="text-[11px] text-indigo-700">Grouped specifications dynamically bound to this model</p>
+                  <p className="text-[11px] text-indigo-700">Prefilled and locked specification values inherited from Model template</p>
                 </div>
-                <span className="text-[10px] bg-indigo-200 text-indigo-900 font-bold px-2 py-0.5 rounded-full">
-                  {activeFieldSet.fields.length} Custom Fields
+                <span className="text-[10px] bg-indigo-200 text-indigo-900 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                  🔒 Read-Only Specification
                 </span>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                 {activeFieldSet.fields.map((field: CustomField) => (
                   <div key={field.id} className="space-y-1">
-                    <label className="block text-xs font-bold text-slate-800">
+                    <label className="block text-xs font-bold text-slate-700">
                       {field.label} {field.isRequired && <span className="text-red-500">*</span>}
                     </label>
 
-                    {/* Render field according to fieldType: text, number, dropdown, radio, date, boolean */}
-                    {field.fieldType === 'text' && (
-                      <input
-                        type="text"
-                        required={field.isRequired}
-                        value={customFieldsData[field.name] || ''}
-                        onChange={(e) => handleCustomFieldChange(field.name, e.target.value)}
-                        className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white"
-                      />
-                    )}
-
-                    {field.fieldType === 'number' && (
-                      <input
-                        type="number"
-                        step="any"
-                        required={field.isRequired}
-                        value={customFieldsData[field.name] || ''}
-                        onChange={(e) => handleCustomFieldChange(field.name, e.target.value)}
-                        className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white"
-                      />
-                    )}
-
-                    {field.fieldType === 'dropdown' && (
-                      <select
-                        required={field.isRequired}
-                        value={customFieldsData[field.name] || ''}
-                        onChange={(e) => handleCustomFieldChange(field.name, e.target.value)}
-                        className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white"
-                      >
-                        <option value="">-- Select {field.label} --</option>
-                        {Array.isArray(field.options) &&
-                          field.options.map((opt, i) => (
-                            <option key={i} value={opt}>
-                              {opt}
-                            </option>
-                          ))}
-                      </select>
-                    )}
-
-                    {field.fieldType === 'radio' && (
-                      <div className="flex flex-wrap items-center gap-3 pt-1">
-                        {Array.isArray(field.options) &&
-                          field.options.map((opt, i) => (
-                            <label key={i} className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer">
-                              <input
-                                type="radio"
-                                name={field.name}
-                                value={opt}
-                                checked={customFieldsData[field.name] === opt}
-                                onChange={(e) => handleCustomFieldChange(field.name, e.target.value)}
-                                className="text-indigo-600 focus:ring-indigo-500"
-                              />
-                              <span>{opt}</span>
-                            </label>
-                          ))}
-                      </div>
-                    )}
-
-                    {field.fieldType === 'date' && (
-                      <input
-                        type="date"
-                        required={field.isRequired}
-                        value={customFieldsData[field.name] || ''}
-                        onChange={(e) => handleCustomFieldChange(field.name, e.target.value)}
-                        className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:outline-none bg-white"
-                      />
-                    )}
-
-                    {field.fieldType === 'boolean' && (
-                      <label className="flex items-center gap-2 pt-1.5 cursor-pointer">
+                    {/* Read-only representation prefilled from Model */}
+                    {field.fieldType === 'boolean' ? (
+                      <div className="flex items-center gap-2 pt-1.5">
                         <input
                           type="checkbox"
+                          disabled
                           checked={!!customFieldsData[field.name]}
-                          onChange={(e) => handleCustomFieldChange(field.name, e.target.checked)}
-                          className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                          className="w-4 h-4 text-indigo-600 rounded bg-slate-100 border-slate-300 cursor-not-allowed"
                         />
-                        <span className="text-xs text-slate-700 font-medium">Yes / Certified</span>
-                      </label>
+                        <span className="text-xs text-slate-600 font-medium">
+                          {customFieldsData[field.name] ? 'Yes / Enabled' : 'No / Disabled'}
+                        </span>
+                      </div>
+                    ) : (
+                      <input
+                        type="text"
+                        readOnly
+                        value={customFieldsData[field.name] !== undefined && customFieldsData[field.name] !== null ? String(customFieldsData[field.name]) : ''}
+                        placeholder="Not specified in model"
+                        className="w-full px-3 py-2 text-xs font-medium border border-slate-200 rounded-lg bg-slate-100/80 text-slate-800 cursor-not-allowed"
+                      />
                     )}
                   </div>
                 ))}
@@ -735,11 +684,15 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
                   className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
                 >
                   <option value="">-- Direct Department Area --</option>
-                  {locations.map((loc) => (
-                    <option key={loc.id} value={loc.id}>
-                      {loc.name} ({loc.type})
-                    </option>
-                  ))}
+                  {locations.map((loc) => {
+                    const parent = loc.parentLocationId ? locations.find((l) => l.id === loc.parentLocationId) : null;
+                    const displayName = parent ? `${parent.name}/${loc.name}` : loc.name;
+                    return (
+                      <option key={loc.id} value={loc.id}>
+                        {displayName} ({loc.type})
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
             </div>

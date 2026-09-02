@@ -137,6 +137,8 @@ export interface Model {
   minThreshold: number;
   manufacturer?: string;
   description?: string;
+  imageUrl?: string | null;
+  customFieldsData?: Record<string, any> | null;
   fieldSet?: FieldSet | null;
   category?: Category | null;
   totalStockQuantity?: number;

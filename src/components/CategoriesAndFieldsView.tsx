@@ -14,6 +14,9 @@ import {
   HelpCircle,
   AlertTriangle,
   FileText,
+  Image as ImageIcon,
+  Upload,
+  Link as LinkIcon,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.tsx';
 import { fetchApi } from '../lib/api.ts';
@@ -75,6 +78,9 @@ export const CategoriesAndFieldsView: React.FC = () => {
   const [modelMinThreshold, setModelMinThreshold] = useState<string>('5');
   const [modelCategoryId, setModelCategoryId] = useState<number | ''>('');
   const [modelFieldSetId, setModelFieldSetId] = useState<number | ''>('');
+  const [modelImageUrl, setModelImageUrl] = useState<string>('');
+  const [modelCustomFieldsData, setModelCustomFieldsData] = useState<Record<string, any>>({});
+  const [showModelUrlInput, setShowModelUrlInput] = useState<boolean>(false);
 
   // Request Reason Modal State
   const [isReasonModalOpen, setIsReasonModalOpen] = useState(false);
@@ -373,6 +379,9 @@ export const CategoriesAndFieldsView: React.FC = () => {
     setModelName('');
     setModelNumber('');
     setModelMinThreshold('5');
+    setModelImageUrl('');
+    setModelCustomFieldsData({});
+    setShowModelUrlInput(false);
     setIsModelModalOpen(true);
   };
 
@@ -383,7 +392,28 @@ export const CategoriesAndFieldsView: React.FC = () => {
     setModelName(m.name);
     setModelNumber(m.modelNumber);
     setModelMinThreshold(m.minThreshold !== undefined && m.minThreshold !== null ? m.minThreshold.toString() : '5');
+    setModelImageUrl(m.imageUrl || '');
+    setModelCustomFieldsData(m.customFieldsData || {});
+    setShowModelUrlInput(false);
     setIsModelModalOpen(true);
+  };
+
+  const handleModelFieldSetChange = (fsId: number | '') => {
+    setModelFieldSetId(fsId);
+    if (!fsId) {
+      setModelCustomFieldsData({});
+      return;
+    }
+    const foundSet = fieldSets.find(f => f.id === fsId);
+    if (foundSet && foundSet.fields) {
+      const initial: Record<string, any> = { ...modelCustomFieldsData };
+      foundSet.fields.forEach(f => {
+        if (initial[f.name] === undefined) {
+          initial[f.name] = f.defaultValue || '';
+        }
+      });
+      setModelCustomFieldsData(initial);
+    }
   };
 
   const handleSaveModel = async (e: React.FormEvent) => {
@@ -401,6 +431,8 @@ export const CategoriesAndFieldsView: React.FC = () => {
             name: modelName,
             modelNumber,
             minThreshold: parseFloat(modelMinThreshold) || 5,
+            imageUrl: modelImageUrl || null,
+            customFieldsData: modelCustomFieldsData,
           }),
         });
         showToast(`Model "${modelName}" updated!`, 'success');
@@ -413,6 +445,8 @@ export const CategoriesAndFieldsView: React.FC = () => {
             name: modelName,
             modelNumber,
             minThreshold: parseFloat(modelMinThreshold) || 5,
+            imageUrl: modelImageUrl || null,
+            customFieldsData: modelCustomFieldsData,
           }),
         });
         showToast(`Model "${modelName}" registered!`, 'success');
@@ -1320,11 +1354,14 @@ export const CategoriesAndFieldsView: React.FC = () => {
       {/* Modal: Model Creator/Editor */}
       {isModelModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-md w-full p-6 space-y-4">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-xl w-full p-6 space-y-4 max-h-[90vh] flex flex-col">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h3 className="text-base font-bold text-slate-900">
-                {editingModelId ? 'Edit Model Template' : 'Create Model Template'}
-              </h3>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  {editingModelId ? 'Edit Model Template' : 'Create Model Template'}
+                </h3>
+                <p className="text-xs text-slate-500">Configure model specifications, image, and fieldset values</p>
+              </div>
               <button
                 onClick={() => setIsModelModalOpen(false)}
                 className="p-1 text-slate-400 hover:text-slate-700 rounded-lg cursor-pointer"
@@ -1333,83 +1370,308 @@ export const CategoriesAndFieldsView: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSaveModel} className="space-y-3 text-xs">
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Model Name <span className="text-red-500">*</span></label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. DMU 50 3rd Generation"
-                  value={modelName}
-                  onChange={(e) => setModelName(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
-                />
+            <form onSubmit={handleSaveModel} className="space-y-4 text-xs overflow-y-auto pr-1 flex-1">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Model Name <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. DMU 50 3rd Generation"
+                    value={modelName}
+                    onChange={(e) => setModelName(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Model Number / Code <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="DMU-50-GEN3"
+                    value={modelNumber}
+                    onChange={(e) => setModelNumber(e.target.value)}
+                    className="w-full px-3 py-2 font-mono border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Model Number / Code <span className="text-red-500">*</span></label>
-                <input
-                  type="text"
-                  required
-                  placeholder="DMU-50-GEN3"
-                  value={modelNumber}
-                  onChange={(e) => setModelNumber(e.target.value)}
-                  className="w-full px-3 py-2 font-mono border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Category <span className="text-red-500">*</span></label>
+                  <select
+                    value={modelCategoryId}
+                    required
+                    onChange={(e) => setModelCategoryId(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.type.toUpperCase()})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Low Stock Threshold <span className="text-slate-400 font-normal">(Alert trigger)</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    required
+                    placeholder="5"
+                    value={modelMinThreshold}
+                    onChange={(e) => setModelMinThreshold(e.target.value)}
+                    className="w-full px-3 py-2 font-mono border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Category <span className="text-red-500">*</span></label>
-                <select
-                  value={modelCategoryId}
-                  required
-                  onChange={(e) => setModelCategoryId(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
-                >
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+              {/* Model Image Upload Section */}
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-slate-700 flex items-center gap-1.5">
+                    <ImageIcon className="w-4 h-4 text-indigo-600" />
+                    Model Image / Visual Specification
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowModelUrlInput(!showModelUrlInput)}
+                    className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
+                  >
+                    <LinkIcon className="w-3 h-3" />
+                    {showModelUrlInput ? 'Switch to Upload' : 'Enter URL instead'}
+                  </button>
+                </div>
+
+                {modelImageUrl ? (
+                  <div className="flex items-center gap-3 bg-white p-2.5 rounded-lg border border-slate-200">
+                    <img
+                      src={modelImageUrl}
+                      alt="Model Preview"
+                      referrerPolicy="no-referrer"
+                      className="w-16 h-16 object-cover rounded-md border border-slate-200 shadow-xs"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src = 'https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=200&auto=format&fit=crop&q=80';
+                      }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-slate-800 truncate">Image Attached</p>
+                      <p className="text-[10px] text-slate-400 truncate">{modelImageUrl.startsWith('data:') ? 'Base64 image uploaded' : modelImageUrl}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setModelImageUrl('')}
+                      className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
+                      title="Remove image"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ) : showModelUrlInput ? (
+                  <div className="flex gap-2">
+                    <input
+                      type="url"
+                      placeholder="https://example.com/model-image.png"
+                      value={modelImageUrl}
+                      onChange={(e) => setModelImageUrl(e.target.value)}
+                      className="flex-1 px-3 py-2 border border-slate-300 rounded-lg bg-white text-xs"
+                    />
+                  </div>
+                ) : (
+                  <label className="border-2 border-dashed border-slate-300 hover:border-indigo-400 bg-white hover:bg-indigo-50/20 transition-colors rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer text-center">
+                    <Upload className="w-6 h-6 text-slate-400 mb-1" />
+                    <span className="text-xs font-semibold text-slate-700">Click to upload model image</span>
+                    <span className="text-[10px] text-slate-400">PNG, JPG, WebP up to 5MB</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = () => {
+                            setModelImageUrl(reader.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                )}
               </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">
-                  Low Stock Threshold <span className="text-slate-400 font-normal">(Alert trigger for this model)</span>
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  step="any"
-                  required
-                  placeholder="5"
-                  value={modelMinThreshold}
-                  onChange={(e) => setModelMinThreshold(e.target.value)}
-                  className="w-full px-3 py-2 font-mono border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
-                />
-                <p className="text-[10px] text-slate-500 mt-1">
-                  Alerts will trigger when total available stock of this model drops to or below this quantity.
-                </p>
+              {/* Field Set Link & Dynamic Form Fields */}
+              <div className="space-y-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
+                    <span>Link Field Set (Dynamic Custom Fields)</span>
+                    <span className="text-[10px] text-indigo-600 font-normal">Fields appear immediately below</span>
+                  </label>
+                  <select
+                    value={modelFieldSetId}
+                    onChange={(e) => handleModelFieldSetChange(e.target.value ? Number(e.target.value) : '')}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white font-semibold text-indigo-900"
+                  >
+                    <option value="">-- No Field Set Attached --</option>
+                    {fieldSets.map((fs) => (
+                      <option key={fs.id} value={fs.id}>
+                        {fs.name} ({fs.fields?.length || 0} specification fields)
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Dynamic Fieldset Inputs rendered immediately when Field Set is selected */}
+                {modelFieldSetId ? (
+                  (() => {
+                    const selectedFieldSet = fieldSets.find(fs => fs.id === Number(modelFieldSetId));
+                    const fields = selectedFieldSet?.fields || [];
+
+                    if (fields.length === 0) {
+                      return (
+                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs">
+                          This field set has no fields defined yet.
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-4 space-y-3">
+                        <div className="flex items-center justify-between pb-1 border-b border-indigo-100">
+                          <span className="font-bold text-indigo-950 flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                            Model Specification Values ({selectedFieldSet?.name})
+                          </span>
+                          <span className="text-[10px] text-indigo-600 font-medium">Prefills & locks in stock items</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                          {fields.map((f) => (
+                            <div key={f.id} className="space-y-1">
+                              <label className="block text-[11px] font-bold text-slate-700">
+                                {f.label} {f.isRequired && <span className="text-red-500">*</span>}
+                              </label>
+
+                              {f.fieldType === 'text' && (
+                                <input
+                                  type="text"
+                                  placeholder={f.defaultValue || `Enter ${f.label}`}
+                                  value={modelCustomFieldsData[f.name] ?? ''}
+                                  onChange={(e) =>
+                                    setModelCustomFieldsData({
+                                      ...modelCustomFieldsData,
+                                      [f.name]: e.target.value,
+                                    })
+                                  }
+                                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500"
+                                />
+                              )}
+
+                              {f.fieldType === 'number' && (
+                                <input
+                                  type="number"
+                                  step="any"
+                                  placeholder={f.defaultValue || '0'}
+                                  value={modelCustomFieldsData[f.name] ?? ''}
+                                  onChange={(e) =>
+                                    setModelCustomFieldsData({
+                                      ...modelCustomFieldsData,
+                                      [f.name]: e.target.value,
+                                    })
+                                  }
+                                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono focus:ring-2 focus:ring-indigo-500"
+                                />
+                              )}
+
+                              {f.fieldType === 'dropdown' && (
+                                <select
+                                  value={modelCustomFieldsData[f.name] ?? ''}
+                                  onChange={(e) =>
+                                    setModelCustomFieldsData({
+                                      ...modelCustomFieldsData,
+                                      [f.name]: e.target.value,
+                                    })
+                                  }
+                                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500"
+                                >
+                                  <option value="">-- Select {f.label} --</option>
+                                  {f.options?.map((opt, i) => (
+                                    <option key={i} value={opt}>
+                                      {opt}
+                                    </option>
+                                  ))}
+                                </select>
+                              )}
+
+                              {f.fieldType === 'radio' && (
+                                <div className="flex flex-wrap gap-2 pt-1">
+                                  {f.options?.map((opt, i) => (
+                                    <label key={i} className="flex items-center gap-1 text-[11px] text-slate-700 cursor-pointer">
+                                      <input
+                                        type="radio"
+                                        name={`field_${f.id}`}
+                                        value={opt}
+                                        checked={modelCustomFieldsData[f.name] === opt}
+                                        onChange={(e) =>
+                                          setModelCustomFieldsData({
+                                            ...modelCustomFieldsData,
+                                            [f.name]: e.target.value,
+                                          })
+                                        }
+                                        className="text-indigo-600 focus:ring-indigo-500"
+                                      />
+                                      <span>{opt}</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              )}
+
+                              {f.fieldType === 'date' && (
+                                <input
+                                  type="date"
+                                  value={modelCustomFieldsData[f.name] ?? ''}
+                                  onChange={(e) =>
+                                    setModelCustomFieldsData({
+                                      ...modelCustomFieldsData,
+                                      [f.name]: e.target.value,
+                                    })
+                                  }
+                                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500"
+                                />
+                              )}
+
+                              {f.fieldType === 'boolean' && (
+                                <label className="flex items-center gap-2 pt-1 text-[11px] font-semibold text-slate-700 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(modelCustomFieldsData[f.name])}
+                                    onChange={(e) =>
+                                      setModelCustomFieldsData({
+                                        ...modelCustomFieldsData,
+                                        [f.name]: e.target.checked,
+                                      })
+                                    }
+                                    className="w-4 h-4 rounded-sm text-indigo-600 border-slate-300 focus:ring-indigo-500"
+                                  />
+                                  <span>Yes / Enabled</span>
+                                </label>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()
+                ) : null}
               </div>
 
-              <div>
-                <label className="block font-bold text-slate-700 mb-1">Link Field Set (Dynamic Custom Fields)</label>
-                <select
-                  value={modelFieldSetId}
-                  onChange={(e) => setModelFieldSetId(e.target.value ? Number(e.target.value) : '')}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white font-semibold text-indigo-900"
-                >
-                  <option value="">-- No Field Set Attached --</option>
-                  {fieldSets.map((fs) => (
-                    <option key={fs.id} value={fs.id}>
-                      {fs.name} ({fs.fields?.length || 0} fields)
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2">
+              <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsModelModalOpen(false)}

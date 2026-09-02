@@ -39,6 +39,7 @@ export const DepartmentPunchPortal: React.FC = () => {
 
   const [selectedItemId, setSelectedItemId] = useState<number | ''>('');
   const [requestedQty, setRequestedQty] = useState<string>('1');
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState<number | ''>(currentDepartmentId || '');
   const [selectedReasonId, setSelectedReasonId] = useState<number | ''>('');
   const [customReasonText, setCustomReasonText] = useState<string>('');
   const [selectedMachineId, setSelectedMachineId] = useState<number | ''>('');
@@ -46,7 +47,7 @@ export const DepartmentPunchPortal: React.FC = () => {
   const [submittedSuccess, setSubmittedSuccess] = useState<EmployeeRequest | null>(null);
 
   const currentBranch = branches.find((b) => b.id === currentBranchId);
-  const currentDept = departments.find((d) => d.id === currentDepartmentId);
+  const currentDept = departments.find((d) => d.id === (selectedDepartmentId || currentDepartmentId));
 
   // Load department stock items, machines, and pre-fed reasons
   const loadKioskData = async () => {
@@ -109,6 +110,12 @@ export const DepartmentPunchPortal: React.FC = () => {
 
       if (res.employee) {
         setVerifiedEmployee(res.employee);
+        if (res.employee.departments && res.employee.departments.length > 0) {
+          const empFirstDeptId = res.employee.departments[0].departmentId;
+          setSelectedDepartmentId(empFirstDeptId || currentDepartmentId || '');
+        } else if (currentDepartmentId) {
+          setSelectedDepartmentId(currentDepartmentId);
+        }
         showToast(`Authenticated: ${res.employee.name} (${res.employee.employeeCode})`, 'success');
       } else {
         setPinError('Invalid 4-digit usercode. Contact your manager.');
@@ -140,7 +147,7 @@ export const DepartmentPunchPortal: React.FC = () => {
         body: JSON.stringify({
           employeeId: verifiedEmployee.id,
           branchId: currentBranchId,
-          departmentId: currentDepartmentId,
+          departmentId: selectedDepartmentId ? Number(selectedDepartmentId) : (currentDepartmentId || null),
           itemId: Number(selectedItemId),
           requestedQty: parseFloat(requestedQty),
           reasonId: selectedReasonId ? Number(selectedReasonId) : null,
@@ -383,8 +390,34 @@ export const DepartmentPunchPortal: React.FC = () => {
               </div>
             )}
 
-            {/* Quantity and Machine Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Department, Quantity, and Machine Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Department <span className="text-red-500">*</span>
+                </label>
+                <select
+                  required
+                  value={selectedDepartmentId}
+                  onChange={(e) => {
+                    const newDeptId = e.target.value ? Number(e.target.value) : '';
+                    setSelectedDepartmentId(newDeptId);
+                    setSelectedMachineId(''); // reset machine if dept changes
+                  }}
+                  className="w-full px-3.5 py-2.5 text-xs font-semibold border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="">-- Choose Department --</option>
+                  {(verifiedEmployee.departments && verifiedEmployee.departments.length > 0
+                    ? verifiedEmployee.departments.map((d) => d.department).filter(Boolean)
+                    : departments
+                  ).map((d: any) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name} ({d.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Requested Quantity ({selectedItemObj?.uom || 'units'}) <span className="text-red-500">*</span>
@@ -401,19 +434,26 @@ export const DepartmentPunchPortal: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Target Machine (Optional)</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Target Machine {selectedDepartmentId ? '(In Department)' : '(Optional)'}
+                </label>
                 <select
                   value={selectedMachineId}
                   onChange={(e) => setSelectedMachineId(e.target.value ? Number(e.target.value) : '')}
                   className="w-full px-3.5 py-2.5 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
                 >
                   <option value="">-- Direct Department Activity / None --</option>
-                  {machines.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name} ({m.machineCode}) - {m.status}
-                    </option>
-                  ))}
+                  {machines
+                    .filter((m) => !selectedDepartmentId || m.departmentId === Number(selectedDepartmentId))
+                    .map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name} ({m.machineCode})
+                      </option>
+                    ))}
                 </select>
+                {selectedDepartmentId && machines.filter((m) => m.departmentId === Number(selectedDepartmentId)).length === 0 && (
+                  <p className="text-[10px] text-slate-400 mt-1">No machines linked to this department.</p>
+                )}
               </div>
             </div>
 

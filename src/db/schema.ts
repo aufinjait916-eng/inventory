@@ -140,6 +140,8 @@ export const models = pgTable('models', {
   minThreshold: real('min_threshold').notNull().default(5), // Low stock alert threshold for model
   manufacturer: text('manufacturer'),
   description: text('description'),
+  imageUrl: text('image_url'),
+  customFieldsData: jsonb('custom_fields_data'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
