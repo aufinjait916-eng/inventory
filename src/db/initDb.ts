@@ -164,6 +164,7 @@ CREATE TABLE IF NOT EXISTS models (
   field_set_id INTEGER,
   name TEXT NOT NULL,
   model_number TEXT NOT NULL,
+  min_threshold REAL NOT NULL DEFAULT 5,
   manufacturer TEXT,
   description TEXT,
   created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
@@ -347,6 +348,12 @@ export async function initializeDatabaseSchema(): Promise<{
     try {
       try {
         await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS password TEXT;`);
+      } catch (alterErr) {
+        // Handled if already exists or permission
+      }
+
+      try {
+        await pool.query(`ALTER TABLE models ADD COLUMN IF NOT EXISTS min_threshold REAL NOT NULL DEFAULT 5;`);
       } catch (alterErr) {
         // Handled if already exists or permission
       }

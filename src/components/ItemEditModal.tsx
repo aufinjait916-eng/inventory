@@ -504,55 +504,63 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Total Quantity</label>
-              <input
-                type="number"
-                min="0"
-                step="any"
-                required
-                value={totalQuantity}
-                onChange={(e) => setTotalQuantity(e.target.value)}
-                className="w-full px-2.5 py-1.5 font-mono border border-slate-300 rounded-lg bg-white"
-              />
+              <label className="block font-bold text-slate-700 mb-1">
+                Total Quantity {itemType === 'asset' && <span className="text-[10px] text-blue-600 font-normal">(Asset = 1)</span>}
+              </label>
+              {itemType === 'asset' ? (
+                <input
+                  type="number"
+                  readOnly
+                  value="1"
+                  className="w-full px-2.5 py-1.5 font-mono border border-slate-300 rounded-lg bg-slate-100 text-slate-700 cursor-not-allowed"
+                />
+              ) : (
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  required
+                  value={totalQuantity}
+                  onChange={(e) => setTotalQuantity(e.target.value)}
+                  className="w-full px-2.5 py-1.5 font-mono border border-slate-300 rounded-lg bg-white"
+                />
+              )}
             </div>
 
             <div>
-              <label className="block font-bold text-slate-700 mb-1">Available Quantity</label>
-              <input
-                type="number"
-                min="0"
-                step="any"
-                required
-                value={availableQuantity}
-                onChange={(e) => setAvailableQuantity(e.target.value)}
-                className="w-full px-2.5 py-1.5 font-mono border border-slate-300 rounded-lg bg-white"
-              />
+              <label className="block font-bold text-slate-700 mb-1">
+                Available Quantity {itemType === 'asset' && <span className="text-[10px] text-blue-600 font-normal">(Asset = 1)</span>}
+              </label>
+              {itemType === 'asset' ? (
+                <input
+                  type="number"
+                  readOnly
+                  value="1"
+                  className="w-full px-2.5 py-1.5 font-mono border border-slate-300 rounded-lg bg-slate-100 text-slate-700 cursor-not-allowed"
+                />
+              ) : (
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  required
+                  value={availableQuantity}
+                  onChange={(e) => setAvailableQuantity(e.target.value)}
+                  className="w-full px-2.5 py-1.5 font-mono border border-slate-300 rounded-lg bg-white"
+                />
+              )}
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Min Threshold Alert</label>
-              <input
-                type="number"
-                min="0"
-                step="any"
-                value={minThreshold}
-                onChange={(e) => setMinThreshold(e.target.value)}
-                className="w-full px-3 py-2 font-mono border border-slate-300 rounded-xl bg-white"
-              />
-            </div>
-
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Internal Notes</label>
-              <input
-                type="text"
-                placeholder="Serial number, batch number, or condition..."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white"
-              />
-            </div>
+          <div>
+            <label className="block font-bold text-slate-700 mb-1">Internal Notes</label>
+            <input
+              type="text"
+              placeholder="Serial number, batch number, or condition..."
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white"
+            />
           </div>
 
           {/* Dynamic Custom Fields Rendering */}

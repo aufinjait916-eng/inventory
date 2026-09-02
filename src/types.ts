@@ -134,10 +134,14 @@ export interface Model {
   fieldSetId?: number | null;
   name: string;
   modelNumber: string;
+  minThreshold: number;
   manufacturer?: string;
   description?: string;
   fieldSet?: FieldSet | null;
   category?: Category | null;
+  totalStockQuantity?: number;
+  availableStockQuantity?: number;
+  isLowStock?: boolean;
   createdAt: string;
 }
 

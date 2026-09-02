@@ -137,6 +137,7 @@ export const models = pgTable('models', {
   fieldSetId: integer('field_set_id'),
   name: text('name').notNull(),
   modelNumber: text('model_number').notNull(),
+  minThreshold: real('min_threshold').notNull().default(5), // Low stock alert threshold for model
   manufacturer: text('manufacturer'),
   description: text('description'),
   createdAt: timestamp('created_at').defaultNow().notNull(),

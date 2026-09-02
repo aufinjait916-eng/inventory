@@ -55,7 +55,6 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
   const [supplierId, setSupplierId] = useState<number | ''>('');
   const [uom, setUom] = useState<UOMType>('unit');
   const [quantity, setQuantity] = useState<string>('1');
-  const [minThreshold, setMinThreshold] = useState<string>('5');
   const [recordDate, setRecordDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [notes, setNotes] = useState('');
   const [imageUrl, setImageUrl] = useState<string>('');
@@ -65,7 +64,6 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
   const [selectedBranchId, setSelectedBranchId] = useState<number>(currentBranchId);
   const [selectedDepartmentId, setSelectedDepartmentId] = useState<number | ''>('');
   const [selectedLocationId, setSelectedLocationId] = useState<number | ''>('');
-  const [selectedMachineId, setSelectedMachineId] = useState<number | ''>('');
 
   // Dynamic Custom Fields from Model's linked Field Set
   const [customFieldsData, setCustomFieldsData] = useState<Record<string, any>>({});
@@ -120,16 +118,21 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
     }
 
     const selectedModel = models.find((m) => m.id === modelId);
-    if (selectedModel && selectedModel.fieldSet) {
-      setActiveFieldSet(selectedModel.fieldSet);
-      // Initialize default values
-      const initialData: Record<string, any> = {};
-      if (selectedModel.fieldSet.fields) {
-        selectedModel.fieldSet.fields.forEach((f) => {
-          initialData[f.name] = f.defaultValue || '';
-        });
+    if (selectedModel) {
+      if (selectedModel.fieldSet) {
+        setActiveFieldSet(selectedModel.fieldSet);
+        // Initialize default values
+        const initialData: Record<string, any> = {};
+        if (selectedModel.fieldSet.fields) {
+          selectedModel.fieldSet.fields.forEach((f) => {
+            initialData[f.name] = f.defaultValue || '';
+          });
+        }
+        setCustomFieldsData(initialData);
+      } else {
+        setActiveFieldSet(null);
+        setCustomFieldsData({});
       }
-      setCustomFieldsData(initialData);
     } else {
       setActiveFieldSet(null);
       setCustomFieldsData({});
@@ -221,13 +224,11 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
           supplierId: supplierId ? Number(supplierId) : null,
           uom,
           quantity: parseFloat(quantity),
-          minThreshold: parseFloat(minThreshold) || 5,
           recordDate,
           notes,
           branchId: selectedBranchId,
           departmentId: selectedDepartmentId ? Number(selectedDepartmentId) : null,
           locationId: selectedLocationId ? Number(selectedLocationId) : null,
-          machineId: selectedMachineId ? Number(selectedMachineId) : null,
           customFieldsData,
         }),
       });
@@ -279,7 +280,10 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
               <button
                 type="button"
                 id="btn-select-type-asset"
-                onClick={() => setItemType('asset')}
+                onClick={() => {
+                  setItemType('asset');
+                  setQuantity('1');
+                }}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition ${
                   itemType === 'asset'
                     ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
@@ -292,7 +296,9 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
               <button
                 type="button"
                 id="btn-select-type-consumable"
-                onClick={() => setItemType('consumable')}
+                onClick={() => {
+                  setItemType('consumable');
+                }}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition ${
                   itemType === 'consumable'
                     ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
@@ -509,7 +515,7 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
               <span>Unit of Measurement (UOM) & Stock Level</span>
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   UOM <span className="text-red-500">*</span>
@@ -532,29 +538,35 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Initial Quantity <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="number"
-                  step="any"
-                  min="0.01"
-                  required
-                  value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-bold font-mono border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Low Stock Threshold
-                </label>
-                <input
-                  type="number"
-                  step="any"
-                  min="0"
-                  value={minThreshold}
-                  onChange={(e) => setMinThreshold(e.target.value)}
-                  className="w-full px-3 py-2 text-xs font-mono border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
-                />
+                {itemType === 'asset' ? (
+                  <div>
+                    <input
+                      type="number"
+                      readOnly
+                      value="1"
+                      className="w-full px-3 py-2 text-xs font-bold font-mono border border-slate-300 rounded-lg bg-slate-100 text-slate-700 cursor-not-allowed"
+                    />
+                    <p className="text-[10px] text-blue-600 font-medium mt-1">
+                      Individual asset tracking (Qty is locked to 1)
+                    </p>
+                  </div>
+                ) : (
+                  <div>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0.01"
+                      required
+                      placeholder="e.g. 50"
+                      value={quantity}
+                      onChange={(e) => setQuantity(e.target.value)}
+                      className="w-full px-3 py-2 text-xs font-bold font-mono border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                    />
+                    <p className="text-[10px] text-slate-500 mt-1">
+                      Multiple quantity batch allowed for consumables
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -676,14 +688,14 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
             </div>
           )}
 
-          {/* Section 4: Initial Storage Location & Machine Allocation */}
+          {/* Section 4: Initial Storage Location */}
           <div className="space-y-4">
             <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
               <Building className="w-3.5 h-3.5 text-slate-400" />
-              <span>Initial Physical Location & Allocation</span>
+              <span>Initial Physical Storage Location</span>
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Branch</label>
                 <select
@@ -730,25 +742,10 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
                   ))}
                 </select>
               </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Assign to Machine (Optional)
-                </label>
-                <select
-                  value={selectedMachineId}
-                  onChange={(e) => setSelectedMachineId(e.target.value ? Number(e.target.value) : '')}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
-                >
-                  <option value="">-- Not Assigned to Machine --</option>
-                  {machines.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name} ({m.machineCode})
-                    </option>
-                  ))}
-                </select>
-              </div>
             </div>
+            <p className="text-[11px] text-slate-400 italic">
+              Note: Machine allocation can be recorded via the Record Stock Transfer & Allocation form.
+            </p>
           </div>
 
           {/* Notes */}

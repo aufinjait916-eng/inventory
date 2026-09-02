@@ -79,17 +79,17 @@ async function startServer() {
     if (req.user.role === 'admin' || req.user.role === 'super_manager') {
       return null;
     }
-    // Managers are strictly restricted to their assigned categories
+    // Managers are restricted to their assigned categories if explicitly configured
     if (req.user.role === 'manager') {
       const userId = req.user.id;
-      if (!userId) return [];
+      if (!userId) return null;
       const perms = await db.select().from(userCategoryPermissions).where(
         and(
           eq(userCategoryPermissions.userId, userId),
           eq(userCategoryPermissions.canManage, true)
         )
       );
-      return perms.map(p => p.categoryId);
+      return perms.length > 0 ? perms.map(p => p.categoryId) : null;
     }
     return null;
   }
@@ -248,9 +248,10 @@ async function startServer() {
   // Reset/Seed demo data
   app.post('/api/seed-demo', authMiddleware, async (req: AuthRequest, res) => {
     try {
-      await seedDatabase();
-      await logEntry(req, 'SEED_DATABASE', 'system', 'SEED', 'Demo dataset seeded');
-      res.json({ success: true, message: 'Database initialized with demo data' });
+      const force = req.body?.force !== false;
+      await seedDatabase(force);
+      await logEntry(req, 'SEED_DATABASE', 'system', 'SEED', 'Demo dataset seeded with comprehensive sample records');
+      res.json({ success: true, message: 'Database populated with comprehensive sample data for all records' });
     } catch (error: any) {
       console.error('Error seeding database:', error);
       res.status(500).json({ error: error.message || 'Failed to seed database' });
@@ -1355,11 +1356,26 @@ async function startServer() {
       const allCategories = await db.select().from(categories);
       const catMap = new Map(allCategories.map(c => [c.id, c]));
 
-      const enriched = modelList.map(m => ({
-        ...m,
-        fieldSet: m.fieldSetId ? fsMap.get(m.fieldSetId) : null,
-        category: catMap.get(m.categoryId),
-      }));
+      // Fetch inventory items to calculate stock totals per model
+      const allInventory = await db.select().from(inventoryItems);
+
+      const enriched = modelList.map(m => {
+        const modelItems = allInventory.filter(item => item.modelId === m.id);
+        const totalQty = modelItems.reduce((acc, item) => acc + (item.totalQuantity || 0), 0);
+        const availQty = modelItems.reduce((acc, item) => acc + (item.availableQuantity || 0), 0);
+        const threshold = m.minThreshold !== undefined && m.minThreshold !== null ? m.minThreshold : 5;
+        const isLow = modelItems.length > 0 && availQty <= threshold;
+
+        return {
+          ...m,
+          minThreshold: threshold,
+          totalStockQuantity: totalQty,
+          availableStockQuantity: availQty,
+          isLowStock: isLow,
+          fieldSet: m.fieldSetId ? fsMap.get(m.fieldSetId) : null,
+          category: catMap.get(m.categoryId),
+        };
+      });
 
       res.json(enriched);
     } catch (error: any) {
@@ -1370,7 +1386,7 @@ async function startServer() {
 
   app.post('/api/models', authMiddleware, async (req: AuthRequest, res) => {
     try {
-      const { categoryId, fieldSetId, name, modelNumber, manufacturer, description } = req.body;
+      const { categoryId, fieldSetId, name, modelNumber, minThreshold, manufacturer, description } = req.body;
       if (!categoryId || !name || !modelNumber) {
         return res.status(400).json({ error: 'Category, name, and model number are required' });
       }
@@ -1380,6 +1396,7 @@ async function startServer() {
         fieldSetId: fieldSetId ? parseInt(fieldSetId) : null,
         name,
         modelNumber,
+        minThreshold: minThreshold !== undefined && minThreshold !== null ? parseFloat(minThreshold) : 5,
         manufacturer: manufacturer || null,
         description: description || null,
       }).returning();
@@ -1395,13 +1412,14 @@ async function startServer() {
   app.put('/api/models/:id', authMiddleware, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { categoryId, fieldSetId, name, modelNumber, manufacturer, description } = req.body;
+      const { categoryId, fieldSetId, name, modelNumber, minThreshold, manufacturer, description } = req.body;
       const [updated] = await db.update(models)
         .set({
           categoryId: categoryId ? parseInt(categoryId) : undefined,
           fieldSetId: fieldSetId !== undefined ? (fieldSetId ? parseInt(fieldSetId) : null) : undefined,
           name: name || undefined,
           modelNumber: modelNumber || undefined,
+          minThreshold: minThreshold !== undefined && minThreshold !== null ? parseFloat(minThreshold) : undefined,
           manufacturer: manufacturer !== undefined ? manufacturer : undefined,
           description: description !== undefined ? description : undefined,
         })
@@ -1736,14 +1754,27 @@ async function startServer() {
         const branchLocs = targetBranch ? locs.filter(l => l.branchId === targetBranch) : locs;
         const branchQty = branchLocs.reduce((acc, cur) => acc + cur.quantity, 0);
 
-        // Determine low stock status
-        const isLow = item.availableQuantity <= item.minThreshold;
+        const modelObj = item.modelId ? modelMap.get(item.modelId) : null;
+        // Low stock threshold works based on model if item has model, otherwise item minThreshold
+        let isLow = false;
+        let effectiveThreshold = item.minThreshold;
+
+        if (modelObj) {
+          effectiveThreshold = modelObj.minThreshold !== undefined && modelObj.minThreshold !== null ? modelObj.minThreshold : 5;
+          // Calculate aggregate available quantity for this model across all inventory items
+          const modelItems = items.filter(i => i.modelId === modelObj.id);
+          const totalModelAvailable = modelItems.reduce((acc, mi) => acc + (mi.availableQuantity || 0), 0);
+          isLow = totalModelAvailable <= effectiveThreshold;
+        } else {
+          isLow = item.availableQuantity <= item.minThreshold;
+        }
 
         return {
           ...item,
+          minThreshold: effectiveThreshold,
           branchQuantity: targetBranch ? branchQty : item.availableQuantity,
           category: catMap.get(item.categoryId),
-          model: item.modelId ? modelMap.get(item.modelId) : null,
+          model: modelObj ? { ...modelObj, minThreshold: effectiveThreshold } : null,
           supplier: item.supplierId ? vendorMap.get(item.supplierId) : null,
           isLowStock: isLow,
           stockLocations: locs,
@@ -1776,12 +1807,15 @@ async function startServer() {
         branchId,
         departmentId,
         locationId,
-        machineId,
       } = req.body;
 
-      if (!code || !name || !itemType || !categoryId || !uom || quantity === undefined) {
-        return res.status(400).json({ error: 'Code, name, itemType, category, UOM, and quantity are required' });
+      if (!code || !name || !itemType || !categoryId || !uom) {
+        return res.status(400).json({ error: 'Code, name, itemType, category, and UOM are required' });
       }
+
+      // Assets always have quantity = 1; Consumables can have multiple quantities
+      const isAsset = itemType === 'asset';
+      const qty = isAsset ? 1 : (parseFloat(quantity) || 1);
 
       // Check category permission
       const allowedCatIds = await getPermittedCategoryIdsForUser(req);
@@ -1789,8 +1823,15 @@ async function startServer() {
         return res.status(403).json({ error: 'Access Denied: You do not have permission to add items to this category.' });
       }
 
-      const qty = parseFloat(quantity) || 1;
-      const threshold = minThreshold ? parseFloat(minThreshold) : 5;
+      // Determine threshold from model if available
+      let threshold = minThreshold ? parseFloat(minThreshold) : 5;
+      if (modelId) {
+        const [modelRecord] = await db.select().from(models).where(eq(models.id, parseInt(modelId)));
+        if (modelRecord && modelRecord.minThreshold !== undefined && modelRecord.minThreshold !== null) {
+          threshold = modelRecord.minThreshold;
+        }
+      }
+
       const bId = branchId ? parseInt(branchId) : (req.user?.branchId || 1);
 
       const [created] = await db.insert(inventoryItems).values({
@@ -1809,16 +1850,16 @@ async function startServer() {
         customFieldsData: customFieldsData || {},
         imageUrl: imageUrl || null,
         notes: notes || null,
-        engagementStatus: itemType === 'asset' ? 'idle' : null,
+        engagementStatus: isAsset ? 'idle' : null,
       }).returning();
 
-      // Create initial stock location
+      // Create initial stock location (Machines are assigned via Record Stock Transfer & Allocation)
       await db.insert(stockLocations).values({
         itemId: created.id,
         branchId: bId,
         departmentId: departmentId ? parseInt(departmentId) : null,
         locationId: locationId ? parseInt(locationId) : null,
-        machineId: machineId ? parseInt(machineId) : null,
+        machineId: null,
         quantity: qty,
       });
 
@@ -1909,6 +1950,61 @@ async function startServer() {
   });
 
   // 13. Movements & Transfers (Department to Department / Branch to Branch / Machine Assignment)
+  // Pending branch transfers awaiting acceptance
+  app.get('/api/movements/pending', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const { branchId, all } = req.query;
+      const allowedCatIds = all === 'true' ? null : await getPermittedCategoryIdsForUser(req);
+
+      let movs = await db.select().from(inventoryMovements)
+        .where(eq(inventoryMovements.status, 'pending_acceptance'))
+        .orderBy(desc(inventoryMovements.createdAt));
+
+      if (branchId) {
+        const b = parseInt(branchId as string);
+        // Pending transfer where destination is this branch
+        movs = movs.filter(m => m.toBranchId === b);
+      }
+
+      // Enrich with branch, dept, location, item info
+      const allItems = await db.select().from(inventoryItems);
+      const itemMap = new Map(allItems.map(i => [i.id, i]));
+      const allBranches = await db.select().from(branches);
+      const bMap = new Map(allBranches.map(b => [b.id, b]));
+      const allDepts = await db.select().from(departments);
+      const dMap = new Map(allDepts.map(d => [d.id, d]));
+      const allLocs = await db.select().from(locations);
+      const lMap = new Map(allLocs.map(l => [l.id, l]));
+      const allMchs = await db.select().from(machines);
+      const mMap = new Map(allMchs.map(m => [m.id, m]));
+
+      // Filter by category if user has restricted categories
+      if (allowedCatIds !== null) {
+        movs = movs.filter(m => {
+          const itm = itemMap.get(m.itemId);
+          return itm && allowedCatIds.includes(itm.categoryId);
+        });
+      }
+
+      const enriched = movs.map(m => ({
+        ...m,
+        item: itemMap.get(m.itemId),
+        fromBranch: bMap.get(m.fromBranchId),
+        toBranch: bMap.get(m.toBranchId),
+        fromDepartment: m.fromDepartmentId ? dMap.get(m.fromDepartmentId) : null,
+        toDepartment: m.toDepartmentId ? dMap.get(m.toDepartmentId) : null,
+        fromLocation: m.fromLocationId ? lMap.get(m.fromLocationId) : null,
+        toLocation: m.toLocationId ? lMap.get(m.toLocationId) : null,
+        toMachine: m.toMachineId ? mMap.get(m.toMachineId) : null,
+      }));
+
+      res.json(enriched);
+    } catch (error: any) {
+      console.error('Error fetching pending movements:', error);
+      res.status(500).json({ error: 'Failed to fetch pending movements' });
+    }
+  });
+
   app.get('/api/movements', authMiddleware, async (req: AuthRequest, res) => {
     try {
       const { branchId, itemId, status, all } = req.query;
@@ -1982,13 +2078,16 @@ async function startServer() {
         notes,
       } = req.body;
 
-      if (!itemId || !quantity || !fromBranchId || !toBranchId) {
-        return res.status(400).json({ error: 'Item, quantity, fromBranch, and toBranch are required' });
+      if (!itemId || !fromBranchId || !toBranchId) {
+        return res.status(400).json({ error: 'Item, fromBranch, and toBranch are required' });
       }
 
-      const qty = parseFloat(quantity);
       const [item] = await db.select().from(inventoryItems).where(eq(inventoryItems.id, parseInt(itemId)));
       if (!item) return res.status(404).json({ error: 'Item not found' });
+
+      // Assets always move as 1 unit
+      const isAsset = item.itemType === 'asset';
+      const qty = isAsset ? 1 : (parseFloat(quantity) || 1);
 
       // Deduct from source stock location
       const sourceLocations = await db.select().from(stockLocations).where(
@@ -2004,6 +2103,19 @@ async function startServer() {
         await db.update(stockLocations)
           .set({ quantity: sourceLoc.quantity - qty })
           .where(eq(stockLocations.id, sourceLoc.id));
+      } else {
+        // Fallback: search any stock location for this item in this branch
+        const anyBranchLoc = await db.select().from(stockLocations).where(
+          and(
+            eq(stockLocations.itemId, item.id),
+            eq(stockLocations.branchId, parseInt(fromBranchId))
+          )
+        );
+        if (anyBranchLoc[0] && anyBranchLoc[0].quantity >= qty) {
+          await db.update(stockLocations)
+            .set({ quantity: anyBranchLoc[0].quantity - qty })
+            .where(eq(stockLocations.id, anyBranchLoc[0].id));
+        }
       }
 
       const isInterBranch = (movementType === 'branch_to_branch') && (parseInt(fromBranchId) !== parseInt(toBranchId));
@@ -2080,7 +2192,13 @@ async function startServer() {
   app.post('/api/movements/:id/accept', authMiddleware, async (req: AuthRequest, res) => {
     try {
       const id = parseInt(req.params.id);
-      const { departmentId, locationId, machineId, notes } = req.body;
+      const rawDept = req.body.targetDepartmentId || req.body.departmentId;
+      const rawLoc = req.body.targetLocationId || req.body.locationId;
+      const rawMch = req.body.targetMachineId || req.body.machineId;
+      const departmentId = rawDept ? parseInt(rawDept) : undefined;
+      const locationId = rawLoc ? parseInt(rawLoc) : undefined;
+      const machineId = rawMch ? parseInt(rawMch) : undefined;
+      const notes = req.body.notes;
 
       const [movement] = await db.select().from(inventoryMovements).where(eq(inventoryMovements.id, id));
       if (!movement) {
@@ -2104,9 +2222,9 @@ async function startServer() {
         and(
           eq(stockLocations.itemId, movement.itemId),
           eq(stockLocations.branchId, movement.toBranchId),
-          departmentId ? eq(stockLocations.departmentId, parseInt(departmentId)) : sql`1=1`,
-          locationId ? eq(stockLocations.locationId, parseInt(locationId)) : sql`1=1`,
-          machineId ? eq(stockLocations.machineId, parseInt(machineId)) : sql`1=1`
+          departmentId ? eq(stockLocations.departmentId, departmentId) : sql`1=1`,
+          locationId ? eq(stockLocations.locationId, locationId) : sql`1=1`,
+          machineId ? eq(stockLocations.machineId, machineId) : sql`1=1`
         )
       );
 
@@ -2118,9 +2236,9 @@ async function startServer() {
         await db.insert(stockLocations).values({
           itemId: movement.itemId,
           branchId: movement.toBranchId,
-          departmentId: departmentId ? parseInt(departmentId) : null,
-          locationId: locationId ? parseInt(locationId) : null,
-          machineId: machineId ? parseInt(machineId) : null,
+          departmentId: departmentId || null,
+          locationId: locationId || null,
+          machineId: machineId || null,
           quantity: movement.quantity,
         });
       }
@@ -2141,9 +2259,9 @@ async function startServer() {
       const [acceptedMovement] = await db.update(inventoryMovements)
         .set({
           status: 'accepted',
-          toDepartmentId: departmentId ? parseInt(departmentId) : null,
-          toLocationId: locationId ? parseInt(locationId) : null,
-          toMachineId: machineId ? parseInt(machineId) : null,
+          toDepartmentId: departmentId || null,
+          toLocationId: locationId || null,
+          toMachineId: machineId || null,
           acceptedAt: new Date(),
           acceptedByUserId: req.user?.id || 1,
           notes: updatedNotes,
@@ -2228,6 +2346,18 @@ async function startServer() {
     } catch (error: any) {
       console.error('Error rejecting branch transfer:', error);
       res.status(500).json({ error: error.message || 'Failed to reject branch transfer' });
+    }
+  });
+
+  app.delete('/api/movements/:id', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await db.delete(inventoryMovements).where(eq(inventoryMovements.id, id));
+      await logEntry(req, 'DELETE_MOVEMENT', 'movement', id, `Deleted movement log #${id}`);
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Error deleting movement:', error);
+      res.status(500).json({ error: error.message || 'Failed to delete movement' });
     }
   });
 
@@ -2789,7 +2919,22 @@ async function startServer() {
 
       const assets = allItems.filter(i => i.itemType === 'asset');
       const consumables = allItems.filter(i => i.itemType === 'consumable');
-      const lowStockItems = allItems.filter(i => i.availableQuantity <= i.minThreshold);
+
+      const allModels = await db.select().from(models);
+      const modelMap = new Map(allModels.map(m => [m.id, m]));
+
+      const lowStockItems = allItems.filter(i => {
+        if (i.modelId) {
+          const m = modelMap.get(i.modelId);
+          if (m) {
+            const thresh = m.minThreshold !== undefined && m.minThreshold !== null ? m.minThreshold : 5;
+            const modelItems = allItems.filter(it => it.modelId === m.id);
+            const totalAvail = modelItems.reduce((acc, it) => acc + (it.availableQuantity || 0), 0);
+            return totalAvail <= thresh;
+          }
+        }
+        return i.availableQuantity <= (i.minThreshold ?? 5);
+      });
       const engagedAssets = assets.filter(i => i.engagementStatus === 'engaged' || i.status === 'in_use');
       const activeRepairs = allRepairs.filter(r => r.status === 'sent_to_vendor');
       const pendingRequests = allRequests.filter(r => r.status === 'pending');

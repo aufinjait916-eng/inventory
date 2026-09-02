@@ -72,6 +72,7 @@ export const CategoriesAndFieldsView: React.FC = () => {
   const [editingModelId, setEditingModelId] = useState<number | null>(null);
   const [modelName, setModelName] = useState('');
   const [modelNumber, setModelNumber] = useState('');
+  const [modelMinThreshold, setModelMinThreshold] = useState<string>('5');
   const [modelCategoryId, setModelCategoryId] = useState<number | ''>('');
   const [modelFieldSetId, setModelFieldSetId] = useState<number | ''>('');
 
@@ -371,6 +372,7 @@ export const CategoriesAndFieldsView: React.FC = () => {
     setModelFieldSetId('');
     setModelName('');
     setModelNumber('');
+    setModelMinThreshold('5');
     setIsModelModalOpen(true);
   };
 
@@ -380,6 +382,7 @@ export const CategoriesAndFieldsView: React.FC = () => {
     setModelFieldSetId(m.fieldSetId || '');
     setModelName(m.name);
     setModelNumber(m.modelNumber);
+    setModelMinThreshold(m.minThreshold !== undefined && m.minThreshold !== null ? m.minThreshold.toString() : '5');
     setIsModelModalOpen(true);
   };
 
@@ -397,6 +400,7 @@ export const CategoriesAndFieldsView: React.FC = () => {
             fieldSetId: modelFieldSetId ? Number(modelFieldSetId) : null,
             name: modelName,
             modelNumber,
+            minThreshold: parseFloat(modelMinThreshold) || 5,
           }),
         });
         showToast(`Model "${modelName}" updated!`, 'success');
@@ -408,6 +412,7 @@ export const CategoriesAndFieldsView: React.FC = () => {
             fieldSetId: modelFieldSetId ? Number(modelFieldSetId) : null,
             name: modelName,
             modelNumber,
+            minThreshold: parseFloat(modelMinThreshold) || 5,
           }),
         });
         showToast(`Model "${modelName}" registered!`, 'success');
@@ -816,7 +821,7 @@ export const CategoriesAndFieldsView: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {models.map((m) => (
-              <div key={m.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 space-y-2 text-xs relative group hover:border-blue-300 transition">
+              <div key={m.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 space-y-2.5 text-xs relative group hover:border-blue-300 transition">
                 <div className="flex items-center justify-between">
                   <span className="font-mono font-bold text-slate-700 bg-slate-200 px-2 py-0.5 rounded">
                     {m.modelNumber}
@@ -827,14 +832,14 @@ export const CategoriesAndFieldsView: React.FC = () => {
                       <div className="flex items-center gap-0.5">
                         <button
                           onClick={() => handleOpenEditModel(m)}
-                          className="text-slate-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50 transition"
+                          className="text-slate-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50 transition cursor-pointer"
                           title="Edit Model"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => handleDeleteModel(m)}
-                          className="text-slate-400 hover:text-red-600 p-1 rounded hover:bg-red-50 transition"
+                          className="text-slate-400 hover:text-red-600 p-1 rounded hover:bg-red-50 transition cursor-pointer"
                           title="Delete Model"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -844,15 +849,35 @@ export const CategoriesAndFieldsView: React.FC = () => {
                   </div>
                 </div>
                 <h4 className="font-bold text-slate-900 text-sm">{m.name}</h4>
+
+                {/* Stock & Threshold metrics for this Model */}
+                <div className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-200 text-[11px]">
+                  <div>
+                    <span className="text-slate-500 font-medium">Low Stock Alert:</span>{' '}
+                    <span className="font-bold font-mono text-slate-800">≤ {m.minThreshold ?? 5} units</span>
+                  </div>
+                  {m.availableStockQuantity !== undefined && (
+                    <span
+                      className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                        m.isLowStock
+                          ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                          : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                      }`}
+                    >
+                      {m.isLowStock ? 'Low Stock' : 'In Stock'}: {m.availableStockQuantity} avail
+                    </span>
+                  )}
+                </div>
+
                 {m.fieldSet ? (
-                  <div className="pt-1">
+                  <div>
                     <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded text-[10px] font-semibold">
                       <Layers className="w-3 h-3" />
                       Field Set: {m.fieldSet.name} ({m.fieldSet.fields?.length || 0} fields)
                     </span>
                   </div>
                 ) : (
-                  <div className="pt-1">
+                  <div>
                     <span className="text-[10px] text-slate-400 italic">No Field Set linked</span>
                   </div>
                 )}
@@ -1347,6 +1372,25 @@ export const CategoriesAndFieldsView: React.FC = () => {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  Low Stock Threshold <span className="text-slate-400 font-normal">(Alert trigger for this model)</span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  required
+                  placeholder="5"
+                  value={modelMinThreshold}
+                  onChange={(e) => setModelMinThreshold(e.target.value)}
+                  className="w-full px-3 py-2 font-mono border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Alerts will trigger when total available stock of this model drops to or below this quantity.
+                </p>
               </div>
 
               <div>

@@ -163,10 +163,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         fetchApi<DashboardStats>(`/api/dashboard-stats?branchId=${currentBranchId}`),
       ]);
 
-      setBranches(branchData || []);
-      setDepartments(deptData || []);
+      const loadedBranches = branchData || [];
+      const loadedDepts = deptData || [];
+
+      setBranches(loadedBranches);
+      setDepartments(loadedDepts);
       setCategories(catData || []);
       setDashboardStats(statsData || null);
+
+      if (loadedBranches.length > 0 && !loadedBranches.some((b) => b.id === currentBranchId)) {
+        setBranchState(loadedBranches[0].id);
+        localStorage.setItem('app_branch_id', loadedBranches[0].id.toString());
+      }
+
+      if (loadedDepts.length > 0 && !loadedDepts.some((d) => d.id === currentDepartmentId)) {
+        setDeptState(loadedDepts[0].id);
+        localStorage.setItem('app_dept_id', loadedDepts[0].id.toString());
+      }
     } catch (err) {
       console.error('Failed to load primary metadata:', err);
     }

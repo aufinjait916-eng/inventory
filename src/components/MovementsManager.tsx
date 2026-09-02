@@ -78,16 +78,24 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
       const [movData, pendingData, invData, branchData, locData] = await Promise.all([
         fetchApi<Movement[]>(`/api/movements?branchId=${currentBranchId}`),
         fetchApi<Movement[]>(`/api/movements/pending?branchId=${currentBranchId}`),
-        fetchApi<InventoryItem[]>(`/api/inventory?branchId=${currentBranchId}`),
+        fetchApi<InventoryItem[]>(`/api/inventory?all=true&branchId=${currentBranchId}`),
         fetchApi<Branch[]>('/api/branches'),
         fetchApi<LocationItem[]>(`/api/locations?branchId=${currentBranchId}`),
       ]);
 
       setMovements(movData || []);
       setPendingTransfers(pendingData || []);
-      setItems(invData || []);
+      const loadedItems = invData || [];
+      setItems(loadedItems);
       setAllBranches(branchData || []);
       setCurrentBranchLocations(locData || []);
+
+      if (!selectedItemId && loadedItems.length > 0) {
+        setSelectedItemId(loadedItems[0].id);
+        if (loadedItems[0].itemType === 'asset') {
+          setQuantity('1');
+        }
+      }
     } catch (err) {
       console.error('Failed to load movements:', err);
     } finally {
@@ -99,7 +107,16 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
     loadMovements();
   }, [currentBranchId]);
 
-  // Load target branch departments, locations, and machines when toBranchId changes
+  // Sync quantity whenever selected item changes
+  const selectedItemObj = items.find((i) => i.id === selectedItemId);
+
+  useEffect(() => {
+    if (selectedItemObj) {
+      if (selectedItemObj.itemType === 'asset') {
+        setQuantity('1');
+      }
+    }
+  }, [selectedItemId, selectedItemObj]);
   useEffect(() => {
     async function loadBranchEntities() {
       try {
@@ -117,8 +134,6 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
     }
     loadBranchEntities();
   }, [toBranchId]);
-
-  const selectedItemObj = items.find((i) => i.id === selectedItemId);
 
   const handleRecordMovement = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -246,7 +261,14 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
         <button
           id="btn-open-new-movement"
           onClick={() => {
-            setSelectedItemId(items[0]?.id || '');
+            loadMovements();
+            if (items.length > 0) {
+              const firstItem = items[0];
+              setSelectedItemId(firstItem.id);
+              if (firstItem.itemType === 'asset') {
+                setQuantity('1');
+              }
+            }
             setIsModalOpen(true);
           }}
           className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition shadow-md shadow-blue-600/20 flex items-center gap-2 cursor-pointer"
@@ -662,15 +684,35 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     Transfer Quantity ({selectedItemObj?.uom || 'units'}) <span className="text-red-500">*</span>
                   </label>
-                  <input
-                    type="number"
-                    step="any"
-                    min="0.1"
-                    required
-                    value={quantity}
-                    onChange={(e) => setQuantity(e.target.value)}
-                    className="w-full px-3 py-2 text-xs font-mono font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
-                  />
+                  {selectedItemObj?.itemType === 'asset' ? (
+                    <div>
+                      <input
+                        type="number"
+                        readOnly
+                        value="1"
+                        className="w-full px-3 py-2 text-xs font-mono font-bold border border-slate-300 rounded-xl bg-slate-100 text-slate-700 cursor-not-allowed"
+                      />
+                      <p className="text-[10px] text-blue-600 font-semibold mt-1">
+                        Each asset has quantity as 1 only
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <input
+                        type="number"
+                        step="any"
+                        min="0.01"
+                        required
+                        placeholder="e.g. 5"
+                        value={quantity}
+                        onChange={(e) => setQuantity(e.target.value)}
+                        className="w-full px-3 py-2 text-xs font-mono font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                      />
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        Consumable stock quantity can be adjusted freely
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {movementType === 'branch_to_branch' ? (
