@@ -728,53 +728,87 @@ async function startServer() {
   });
 
   // Employee 4-digit security code validation (for Department / Employee Punch Portal)
-  app.post('/api/employee-punch-verify', async (req, res) => {
+  const handleVerifyEmployeePin = async (req: express.Request, res: express.Response) => {
     try {
-      const { userCode, departmentId, branchId } = req.body;
-      if (!userCode || userCode.length !== 4) {
+      const userCode = req.body.userCode || req.body.pin || req.body.code;
+      const branchId = req.body.branchId ? parseInt(req.body.branchId) : undefined;
+      const departmentId = req.body.departmentId ? parseInt(req.body.departmentId) : undefined;
+
+      if (!userCode || String(userCode).trim().length !== 4) {
         return res.status(400).json({ error: 'Please enter a valid 4-digit numeric code' });
       }
 
-      const [matchedEmp] = await db.select().from(employees).where(
-        and(
-          eq(employees.userCode, userCode),
-          eq(employees.isActive, true)
-        )
-      );
+      const codeStr = String(userCode).trim();
+      let queryConditions = [
+        eq(employees.userCode, codeStr),
+        eq(employees.isActive, true)
+      ];
+      if (branchId) {
+        queryConditions.push(eq(employees.branchId, branchId));
+      }
+
+      let [matchedEmp] = await db.select().from(employees).where(and(...queryConditions));
+
+      // If not found in specific branch, check across all active employees in the system
+      if (!matchedEmp) {
+        const [fallbackEmp] = await db.select().from(employees).where(
+          and(
+            eq(employees.userCode, codeStr),
+            eq(employees.isActive, true)
+          )
+        );
+        matchedEmp = fallbackEmp;
+      }
 
       if (!matchedEmp) {
         return res.status(401).json({ error: 'Invalid 4-digit security code. Employee not found.' });
       }
 
-      // Check if employee belongs to this department
-      if (departmentId) {
-        const links = await db.select().from(employeeDepartments).where(
-          and(
-            eq(employeeDepartments.employeeId, matchedEmp.id),
-            eq(employeeDepartments.departmentId, parseInt(departmentId))
-          )
-        );
-        if (links.length === 0) {
+      // Fetch department links
+      const allLinks = await db.select().from(employeeDepartments).where(eq(employeeDepartments.employeeId, matchedEmp.id));
+      const allDepts = await db.select().from(departments);
+      const deptMap = new Map(allDepts.map(d => [d.id, d]));
+
+      const deptDetails = allLinks.map(l => ({
+        ...l,
+        department: deptMap.get(l.departmentId),
+      }));
+
+      // Check if employee belongs to this department (if departmentId specified)
+      if (departmentId && deptDetails.length > 0) {
+        const hasDept = deptDetails.some(l => l.departmentId === departmentId);
+        if (!hasDept) {
           return res.status(403).json({
             error: `Employee ${matchedEmp.name} is not assigned to this department.`,
           });
         }
       }
 
+      const fullEmployee = {
+        id: matchedEmp.id,
+        name: matchedEmp.name,
+        employeeCode: matchedEmp.employeeCode,
+        branchId: matchedEmp.branchId,
+        userCode: matchedEmp.userCode,
+        phone: matchedEmp.phone,
+        email: matchedEmp.email,
+        isActive: matchedEmp.isActive,
+        departments: deptDetails,
+        createdAt: matchedEmp.createdAt,
+      };
+
       res.json({
         success: true,
-        employee: {
-          id: matchedEmp.id,
-          name: matchedEmp.name,
-          employeeCode: matchedEmp.employeeCode,
-          branchId: matchedEmp.branchId,
-        },
+        employee: fullEmployee,
       });
     } catch (error: any) {
       console.error('Error verifying employee punch code:', error);
-      res.status(500).json({ error: 'Failed to verify employee code' });
+      res.status(500).json({ error: error.message || 'Failed to verify employee code' });
     }
-  });
+  };
+
+  app.post('/api/employees/verify-pin', handleVerifyEmployeePin);
+  app.post('/api/employee-punch-verify', handleVerifyEmployeePin);
 
   // 6b. System Users & Managers Management (Admin only for creation & modifications)
   app.get('/api/users', authMiddleware, async (req: AuthRequest, res) => {
