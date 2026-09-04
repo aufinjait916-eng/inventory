@@ -24,6 +24,9 @@ export const SCHEMA_TABLES = [
   'inventory_movements',
   'vendor_repairs',
   'entry_logs',
+  'pm_plans',
+  'pm_schedules',
+  'pm_work_orders',
   'users',
 ];
 
@@ -315,6 +318,79 @@ CREATE TABLE IF NOT EXISTS entry_logs (
   created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
 );
 
+-- 20. Preventive Maintenance Plans
+CREATE TABLE IF NOT EXISTS pm_plans (
+  id SERIAL PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  title TEXT NOT NULL,
+  description TEXT,
+  category TEXT NOT NULL DEFAULT 'General Maintenance',
+  frequency_type TEXT NOT NULL DEFAULT 'monthly',
+  frequency_interval INTEGER NOT NULL DEFAULT 1,
+  estimated_duration_minutes INTEGER NOT NULL DEFAULT 60,
+  priority TEXT NOT NULL DEFAULT 'medium',
+  machine_category TEXT,
+  checklist_template JSONB,
+  required_parts_template JSONB,
+  safety_notes TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_by_id INTEGER,
+  created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+-- 21. Preventive Maintenance Schedules
+CREATE TABLE IF NOT EXISTS pm_schedules (
+  id SERIAL PRIMARY KEY,
+  plan_id INTEGER NOT NULL,
+  machine_id INTEGER NOT NULL,
+  branch_id INTEGER NOT NULL,
+  department_id INTEGER NOT NULL,
+  assigned_employee_id INTEGER,
+  schedule_type TEXT NOT NULL DEFAULT 'fixed_calendar',
+  frequency_type TEXT NOT NULL DEFAULT 'monthly',
+  frequency_interval INTEGER NOT NULL DEFAULT 1,
+  start_date TEXT NOT NULL,
+  next_due_date TEXT NOT NULL,
+  last_completed_date TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  auto_generate_days_in_advance INTEGER NOT NULL DEFAULT 7,
+  notes TEXT,
+  created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+-- 22. Preventive Maintenance Work Orders
+CREATE TABLE IF NOT EXISTS pm_work_orders (
+  id SERIAL PRIMARY KEY,
+  work_order_number TEXT NOT NULL UNIQUE,
+  schedule_id INTEGER,
+  plan_id INTEGER NOT NULL,
+  machine_id INTEGER NOT NULL,
+  branch_id INTEGER NOT NULL,
+  department_id INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  due_date TEXT NOT NULL,
+  priority TEXT NOT NULL DEFAULT 'medium',
+  status TEXT NOT NULL DEFAULT 'scheduled',
+  assigned_employee_id INTEGER,
+  assigned_user_id INTEGER,
+  started_at TIMESTAMP WITHOUT TIME ZONE,
+  completed_at TIMESTAMP WITHOUT TIME ZONE,
+  completed_by_employee_id INTEGER,
+  completed_by_user_id INTEGER,
+  completed_by_pin TEXT,
+  completed_by_name TEXT,
+  checklist_results JSONB,
+  parts_consumed JSONB,
+  overall_condition TEXT DEFAULT 'good',
+  summary_notes TEXT,
+  time_spent_minutes INTEGER DEFAULT 0,
+  skipped_reason TEXT,
+  created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
+);
+
 -- Performance Indexes
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_employees_code ON employees(employee_code);
@@ -326,6 +402,12 @@ CREATE INDEX IF NOT EXISTS idx_stock_locations_branch ON stock_locations(branch_
 CREATE INDEX IF NOT EXISTS idx_employee_requests_branch ON employee_requests(branch_id);
 CREATE INDEX IF NOT EXISTS idx_movements_item ON inventory_movements(item_id);
 CREATE INDEX IF NOT EXISTS idx_logs_created ON entry_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_pm_schedules_branch ON pm_schedules(branch_id);
+CREATE INDEX IF NOT EXISTS idx_pm_schedules_machine ON pm_schedules(machine_id);
+CREATE INDEX IF NOT EXISTS idx_pm_schedules_due ON pm_schedules(next_due_date);
+CREATE INDEX IF NOT EXISTS idx_pm_work_orders_branch ON pm_work_orders(branch_id);
+CREATE INDEX IF NOT EXISTS idx_pm_work_orders_status ON pm_work_orders(status);
+CREATE INDEX IF NOT EXISTS idx_pm_work_orders_due ON pm_work_orders(due_date);
 `;
 
 /**

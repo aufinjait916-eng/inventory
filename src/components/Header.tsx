@@ -1,12 +1,17 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   LogOut,
   AlertTriangle,
   User,
   Shield,
+  CalendarClock,
+  Wrench,
+  CheckCircle2,
+  Bell,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.tsx';
 import { UserRole } from '../types.ts';
+import { fetchApi } from '../lib/api.ts';
 
 export const Header: React.FC = () => {
   const {
@@ -22,6 +27,30 @@ export const Header: React.FC = () => {
     dashboardStats,
     logout,
   } = useApp();
+
+  const [pmBadges, setPmBadges] = useState<{
+    overdue: number;
+    dueToday: number;
+    dueThisWeek: number;
+    totalPending: number;
+  } | null>(null);
+
+  const loadPMBadges = async () => {
+    try {
+      const data = await fetchApi<any>(`/api/pm/summary-badges?branchId=${currentBranchId}`);
+      if (data) {
+        setPmBadges(data);
+      }
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    loadPMBadges();
+    const interval = setInterval(loadPMBadges, 30000);
+    return () => clearInterval(interval);
+  }, [currentBranchId]);
 
   const roleLabels: Record<UserRole, { title: string; badgeColor: string }> = {
     admin: {
@@ -91,8 +120,21 @@ export const Header: React.FC = () => {
         )}
       </div>
 
-      {/* Right: Low Stock Alert & Authenticated User Profile + Logout */}
-      <div className="flex items-center gap-4">
+      {/* Right: Low Stock Alert & PM Notifications & User Profile */}
+      <div className="flex items-center gap-3">
+        {/* PM Notification Pill */}
+        {pmBadges && pmBadges.overdue > 0 ? (
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold animate-pulse">
+            <CalendarClock className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+            <span>{pmBadges.overdue} PM Overdue</span>
+          </div>
+        ) : pmBadges && pmBadges.dueToday > 0 ? (
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded bg-blue-50 border border-blue-200 text-blue-800 text-xs font-semibold">
+            <CalendarClock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+            <span>{pmBadges.dueToday} PM Due Today</span>
+          </div>
+        ) : null}
+
         {/* Low Stock Alert Pill */}
         {dashboardStats?.lowStockCount ? (
           <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">

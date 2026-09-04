@@ -26,6 +26,9 @@ import {
   inventoryMovements,
   vendorRepairs,
   entryLogs,
+  pmPlans,
+  pmSchedules,
+  pmWorkOrders,
   users,
 } from './src/db/schema.ts';
 import { eq, and, desc, sql, inArray } from 'drizzle-orm';
@@ -2952,6 +2955,1035 @@ async function startServer() {
     }
   });
 
+  // ==========================================
+  // PREVENTIVE MAINTENANCE API ROUTES
+  // ==========================================
+
+  function computeNextDueDate(baseDateStr: string, freqType: string, interval: number = 1): string {
+    const d = new Date(baseDateStr + 'T00:00:00');
+    const count = Math.max(1, interval || 1);
+    switch (freqType) {
+      case 'daily':
+        d.setDate(d.getDate() + count);
+        break;
+      case 'weekly':
+        d.setDate(d.getDate() + (7 * count));
+        break;
+      case 'biweekly':
+        d.setDate(d.getDate() + (14 * count));
+        break;
+      case 'monthly':
+        d.setMonth(d.getMonth() + count);
+        break;
+      case 'quarterly':
+        d.setMonth(d.getMonth() + (3 * count));
+        break;
+      case 'semi_annually':
+        d.setMonth(d.getMonth() + (6 * count));
+        break;
+      case 'annually':
+        d.setFullYear(d.getFullYear() + count);
+        break;
+      case 'custom_days':
+      default:
+        d.setDate(d.getDate() + count);
+        break;
+    }
+    return d.toISOString().split('T')[0];
+  }
+
+  // 1. PM Master Plans (Admin & Super Manager can create/edit, all can view)
+  app.get('/api/pm/plans', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const allPlans = await db.select().from(pmPlans).orderBy(pmPlans.code);
+      const allSchedules = await db.select().from(pmSchedules);
+      
+      const enriched = allPlans.map((plan) => {
+        const schedCount = allSchedules.filter((s) => s.planId === plan.id && s.status === 'active').length;
+        return {
+          ...plan,
+          schedulesCount: schedCount,
+        };
+      });
+
+      res.json(enriched);
+    } catch (error: any) {
+      console.error('Error fetching PM plans:', error);
+      res.status(500).json({ error: 'Failed to fetch PM master plans' });
+    }
+  });
+
+  app.get('/api/pm/plans/:id', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const planId = parseInt(req.params.id);
+      const [plan] = await db.select().from(pmPlans).where(eq(pmPlans.id, planId));
+      if (!plan) return res.status(404).json({ error: 'PM plan not found' });
+      res.json(plan);
+    } catch (error: any) {
+      console.error('Error fetching PM plan:', error);
+      res.status(500).json({ error: 'Failed to fetch PM plan' });
+    }
+  });
+
+  app.post('/api/pm/plans', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      if (req.user?.role !== 'admin' && req.user?.role !== 'super_manager') {
+        return res.status(403).json({
+          error: 'Access Denied: Only Administrator and Super Manager roles can create master PM plans.',
+        });
+      }
+
+      const {
+        code,
+        title,
+        description,
+        category,
+        frequencyType,
+        frequencyInterval,
+        estimatedDurationMinutes,
+        priority,
+        machineCategory,
+        checklistTemplate,
+        requiredPartsTemplate,
+        safetyNotes,
+        isActive,
+      } = req.body;
+
+      if (!title || !frequencyType) {
+        return res.status(400).json({ error: 'Title and frequency type are required' });
+      }
+
+      // Auto-generate code if missing
+      const planCode = code || `PM-${category ? category.substring(0, 3).toUpperCase() : 'GEN'}-${Date.now().toString().slice(-4)}`;
+
+      const [created] = await db.insert(pmPlans).values({
+        code: planCode,
+        title,
+        description: description || null,
+        category: category || 'General Maintenance',
+        frequencyType: frequencyType || 'monthly',
+        frequencyInterval: frequencyInterval ? parseInt(frequencyInterval) : 1,
+        estimatedDurationMinutes: estimatedDurationMinutes ? parseInt(estimatedDurationMinutes) : 60,
+        priority: priority || 'medium',
+        machineCategory: machineCategory || null,
+        checklistTemplate: checklistTemplate || [],
+        requiredPartsTemplate: requiredPartsTemplate || [],
+        safetyNotes: safetyNotes || null,
+        isActive: isActive !== false,
+        createdById: req.user?.id || 1,
+      }).returning();
+
+      await logEntry(req, 'CREATE_PM_PLAN', 'pm_plan', created.id, `Created PM master plan "${created.title}" (${created.code})`);
+      res.json(created);
+    } catch (error: any) {
+      console.error('Error creating PM plan:', error);
+      res.status(500).json({ error: error.message || 'Failed to create PM plan' });
+    }
+  });
+
+  app.put('/api/pm/plans/:id', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      if (req.user?.role !== 'admin' && req.user?.role !== 'super_manager') {
+        return res.status(403).json({
+          error: 'Access Denied: Only Administrator and Super Manager roles can update master PM plans.',
+        });
+      }
+
+      const planId = parseInt(req.params.id);
+      const {
+        code,
+        title,
+        description,
+        category,
+        frequencyType,
+        frequencyInterval,
+        estimatedDurationMinutes,
+        priority,
+        machineCategory,
+        checklistTemplate,
+        requiredPartsTemplate,
+        safetyNotes,
+        isActive,
+      } = req.body;
+
+      const [updated] = await db.update(pmPlans).set({
+        code: code || undefined,
+        title: title || undefined,
+        description: description !== undefined ? description : undefined,
+        category: category || undefined,
+        frequencyType: frequencyType || undefined,
+        frequencyInterval: frequencyInterval ? parseInt(frequencyInterval) : undefined,
+        estimatedDurationMinutes: estimatedDurationMinutes ? parseInt(estimatedDurationMinutes) : undefined,
+        priority: priority || undefined,
+        machineCategory: machineCategory !== undefined ? machineCategory : undefined,
+        checklistTemplate: checklistTemplate !== undefined ? checklistTemplate : undefined,
+        requiredPartsTemplate: requiredPartsTemplate !== undefined ? requiredPartsTemplate : undefined,
+        safetyNotes: safetyNotes !== undefined ? safetyNotes : undefined,
+        isActive: isActive !== undefined ? isActive : undefined,
+        updatedAt: new Date(),
+      }).where(eq(pmPlans.id, planId)).returning();
+
+      if (!updated) return res.status(404).json({ error: 'PM plan not found' });
+
+      await logEntry(req, 'UPDATE_PM_PLAN', 'pm_plan', planId, `Updated PM master plan "${updated.title}" (${updated.code})`);
+      res.json(updated);
+    } catch (error: any) {
+      console.error('Error updating PM plan:', error);
+      res.status(500).json({ error: error.message || 'Failed to update PM plan' });
+    }
+  });
+
+  app.delete('/api/pm/plans/:id', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      if (req.user?.role !== 'admin' && req.user?.role !== 'super_manager') {
+        return res.status(403).json({
+          error: 'Access Denied: Only Administrator and Super Manager roles can delete master PM plans.',
+        });
+      }
+
+      const planId = parseInt(req.params.id);
+      const [plan] = await db.select().from(pmPlans).where(eq(pmPlans.id, planId));
+      if (!plan) return res.status(404).json({ error: 'PM plan not found' });
+
+      // Clean up linked work orders and schedules
+      await db.delete(pmWorkOrders).where(eq(pmWorkOrders.planId, planId));
+      await db.delete(pmSchedules).where(eq(pmSchedules.planId, planId));
+      await db.delete(pmPlans).where(eq(pmPlans.id, planId));
+
+      await logEntry(req, 'DELETE_PM_PLAN', 'pm_plan', planId, `Deleted PM master plan "${plan.title}" (${plan.code})`);
+      res.json({ success: true, message: 'PM plan and associated schedules removed' });
+    } catch (error: any) {
+      console.error('Error deleting PM plan:', error);
+      res.status(500).json({ error: error.message || 'Failed to delete PM plan' });
+    }
+  });
+
+  // 2. PM Recurring Schedules (Admin & Super Manager can assign schedules)
+  app.get('/api/pm/schedules', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const { branchId, departmentId, machineId, status } = req.query;
+
+      const [allSchedules, allPlans, allMachines, allBranches, allDepts, allEmployees, allWorkOrders] = await Promise.all([
+        db.select().from(pmSchedules).orderBy(pmSchedules.nextDueDate),
+        db.select().from(pmPlans),
+        db.select().from(machines),
+        db.select().from(branches),
+        db.select().from(departments),
+        db.select().from(employees),
+        db.select().from(pmWorkOrders),
+      ]);
+
+      const planMap = new Map(allPlans.map((p) => [p.id, p]));
+      const machineMap = new Map(allMachines.map((m) => [m.id, m]));
+      const branchMap = new Map(allBranches.map((b) => [b.id, b]));
+      const deptMap = new Map(allDepts.map((d) => [d.id, d]));
+      const empMap = new Map(allEmployees.map((e) => [e.id, e]));
+
+      let filtered = allSchedules;
+
+      // Role and parameter scoping
+      if (req.user?.role === 'manager' || req.user?.role === 'department') {
+        const uBranch = req.user.branchId || 1;
+        filtered = filtered.filter((s) => s.branchId === uBranch);
+        if (req.user.departmentId) {
+          filtered = filtered.filter((s) => s.departmentId === req.user?.departmentId);
+        }
+      } else if (branchId) {
+        filtered = filtered.filter((s) => s.branchId === parseInt(branchId as string));
+      }
+
+      if (departmentId) {
+        filtered = filtered.filter((s) => s.departmentId === parseInt(departmentId as string));
+      }
+      if (machineId) {
+        filtered = filtered.filter((s) => s.machineId === parseInt(machineId as string));
+      }
+      if (status) {
+        filtered = filtered.filter((s) => s.status === status);
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+
+      const enriched = filtered.map((sched) => {
+        const activeWO = allWorkOrders.find(
+          (wo) => wo.scheduleId === sched.id && (wo.status === 'scheduled' || wo.status === 'in_progress')
+        );
+
+        const dueMs = new Date(sched.nextDueDate + 'T00:00:00').getTime();
+        const nowMs = new Date(today + 'T00:00:00').getTime();
+        const daysUntilDue = Math.round((dueMs - nowMs) / (86400000));
+        const isOverdue = daysUntilDue < 0 && sched.status === 'active';
+
+        return {
+          ...sched,
+          plan: planMap.get(sched.planId),
+          machine: machineMap.get(sched.machineId),
+          branch: branchMap.get(sched.branchId),
+          department: deptMap.get(sched.departmentId),
+          assignedEmployee: sched.assignedEmployeeId ? empMap.get(sched.assignedEmployeeId) : null,
+          activeWorkOrder: activeWO || null,
+          daysUntilDue,
+          isOverdue,
+        };
+      });
+
+      res.json(enriched);
+    } catch (error: any) {
+      console.error('Error fetching PM schedules:', error);
+      res.status(500).json({ error: 'Failed to fetch PM schedules' });
+    }
+  });
+
+  app.post('/api/pm/schedules', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      if (req.user?.role !== 'admin' && req.user?.role !== 'super_manager') {
+        return res.status(403).json({
+          error: 'Access Denied: Only Administrator and Super Manager roles can assign PM recurring schedules.',
+        });
+      }
+
+      const {
+        planId,
+        machineId,
+        branchId,
+        departmentId,
+        assignedEmployeeId,
+        scheduleType,
+        frequencyType,
+        frequencyInterval,
+        startDate,
+        nextDueDate,
+        autoGenerateDaysInAdvance,
+        notes,
+      } = req.body;
+
+      if (!planId || !machineId) {
+        return res.status(400).json({ error: 'Plan and Machine selection are required' });
+      }
+
+      const [plan] = await db.select().from(pmPlans).where(eq(pmPlans.id, parseInt(planId)));
+      if (!plan) return res.status(404).json({ error: 'Plan not found' });
+
+      const [machine] = await db.select().from(machines).where(eq(machines.id, parseInt(machineId)));
+      if (!machine) return res.status(404).json({ error: 'Machine not found' });
+
+      const bId = branchId ? parseInt(branchId) : machine.branchId;
+      const dId = departmentId ? parseInt(departmentId) : machine.departmentId;
+      const sDate = startDate || new Date().toISOString().split('T')[0];
+      const fType = frequencyType || plan.frequencyType || 'monthly';
+      const fInterval = frequencyInterval ? parseInt(frequencyInterval) : (plan.frequencyInterval || 1);
+      const nDue = nextDueDate || sDate;
+
+      const [created] = await db.insert(pmSchedules).values({
+        planId: plan.id,
+        machineId: machine.id,
+        branchId: bId,
+        departmentId: dId,
+        assignedEmployeeId: assignedEmployeeId ? parseInt(assignedEmployeeId) : null,
+        scheduleType: scheduleType || 'fixed_calendar',
+        frequencyType: fType,
+        frequencyInterval: fInterval,
+        startDate: sDate,
+        nextDueDate: nDue,
+        status: 'active',
+        autoGenerateDaysInAdvance: autoGenerateDaysInAdvance ? parseInt(autoGenerateDaysInAdvance) : 7,
+        notes: notes || null,
+      }).returning();
+
+      // Automatically spawn initial active work order for this schedule
+      const woNum = `WO-PM-${Date.now().toString().slice(-6)}`;
+      await db.insert(pmWorkOrders).values({
+        workOrderNumber: woNum,
+        scheduleId: created.id,
+        planId: plan.id,
+        machineId: machine.id,
+        branchId: bId,
+        departmentId: dId,
+        title: `${machine.machineCode} - ${plan.title}`,
+        dueDate: nDue,
+        priority: plan.priority || 'medium',
+        status: 'scheduled',
+        assignedEmployeeId: assignedEmployeeId ? parseInt(assignedEmployeeId) : null,
+        checklistResults: (plan.checklistTemplate as any[] || []).map((t) => ({
+          taskId: t.id,
+          task: t.task,
+          type: t.type,
+          status: 'pass',
+          notes: '',
+        })),
+        partsConsumed: [],
+      });
+
+      await logEntry(req, 'ASSIGN_PM_SCHEDULE', 'pm_schedule', created.id, `Assigned PM schedule "${plan.title}" to machine ${machine.name} (${machine.machineCode})`, bId);
+      res.json(created);
+    } catch (error: any) {
+      console.error('Error creating PM schedule:', error);
+      res.status(500).json({ error: error.message || 'Failed to create PM schedule' });
+    }
+  });
+
+  app.put('/api/pm/schedules/:id', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      if (req.user?.role !== 'admin' && req.user?.role !== 'super_manager') {
+        return res.status(403).json({
+          error: 'Access Denied: Only Administrator and Super Manager roles can edit PM schedules.',
+        });
+      }
+
+      const scheduleId = parseInt(req.params.id);
+      const {
+        assignedEmployeeId,
+        scheduleType,
+        frequencyType,
+        frequencyInterval,
+        nextDueDate,
+        status,
+        autoGenerateDaysInAdvance,
+        notes,
+      } = req.body;
+
+      const [updated] = await db.update(pmSchedules).set({
+        assignedEmployeeId: assignedEmployeeId !== undefined ? (assignedEmployeeId ? parseInt(assignedEmployeeId) : null) : undefined,
+        scheduleType: scheduleType || undefined,
+        frequencyType: frequencyType || undefined,
+        frequencyInterval: frequencyInterval ? parseInt(frequencyInterval) : undefined,
+        nextDueDate: nextDueDate || undefined,
+        status: status || undefined,
+        autoGenerateDaysInAdvance: autoGenerateDaysInAdvance ? parseInt(autoGenerateDaysInAdvance) : undefined,
+        notes: notes !== undefined ? notes : undefined,
+        updatedAt: new Date(),
+      }).where(eq(pmSchedules.id, scheduleId)).returning();
+
+      if (!updated) return res.status(404).json({ error: 'Schedule not found' });
+
+      await logEntry(req, 'UPDATE_PM_SCHEDULE', 'pm_schedule', scheduleId, `Updated PM schedule #${scheduleId}`);
+      res.json(updated);
+    } catch (error: any) {
+      console.error('Error updating PM schedule:', error);
+      res.status(500).json({ error: error.message || 'Failed to update PM schedule' });
+    }
+  });
+
+  app.delete('/api/pm/schedules/:id', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      if (req.user?.role !== 'admin' && req.user?.role !== 'super_manager') {
+        return res.status(403).json({
+          error: 'Access Denied: Only Administrator and Super Manager roles can remove PM schedules.',
+        });
+      }
+
+      const scheduleId = parseInt(req.params.id);
+      await db.delete(pmWorkOrders).where(eq(pmWorkOrders.scheduleId, scheduleId));
+      await db.delete(pmSchedules).where(eq(pmSchedules.id, scheduleId));
+
+      await logEntry(req, 'DELETE_PM_SCHEDULE', 'pm_schedule', scheduleId, `Deleted PM schedule #${scheduleId}`);
+      res.json({ success: true, message: 'PM schedule and linked active work orders removed' });
+    } catch (error: any) {
+      console.error('Error deleting PM schedule:', error);
+      res.status(500).json({ error: error.message || 'Failed to delete PM schedule' });
+    }
+  });
+
+  // 3. PM Work Orders / Checklists Queue
+  app.get('/api/pm/work-orders', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const { branchId, departmentId, machineId, status, priority, dueRange } = req.query;
+
+      const [allWorkOrders, allPlans, allMachines, allBranches, allDepts, allEmployees] = await Promise.all([
+        db.select().from(pmWorkOrders).orderBy(desc(pmWorkOrders.dueDate)),
+        db.select().from(pmPlans),
+        db.select().from(machines),
+        db.select().from(branches),
+        db.select().from(departments),
+        db.select().from(employees),
+      ]);
+
+      const planMap = new Map(allPlans.map((p) => [p.id, p]));
+      const machineMap = new Map(allMachines.map((m) => [m.id, m]));
+      const branchMap = new Map(allBranches.map((b) => [b.id, b]));
+      const deptMap = new Map(allDepts.map((d) => [d.id, d]));
+      const empMap = new Map(allEmployees.map((e) => [e.id, e]));
+
+      let filtered = allWorkOrders;
+
+      // Scoping by user role
+      if (req.user?.role === 'manager' || req.user?.role === 'department') {
+        const uBranch = req.user.branchId || 1;
+        filtered = filtered.filter((wo) => wo.branchId === uBranch);
+        if (req.user.departmentId) {
+          filtered = filtered.filter((wo) => wo.departmentId === req.user?.departmentId);
+        }
+      } else if (branchId) {
+        filtered = filtered.filter((wo) => wo.branchId === parseInt(branchId as string));
+      }
+
+      if (departmentId) {
+        filtered = filtered.filter((wo) => wo.departmentId === parseInt(departmentId as string));
+      }
+      if (machineId) {
+        filtered = filtered.filter((wo) => wo.machineId === parseInt(machineId as string));
+      }
+      if (status) {
+        filtered = filtered.filter((wo) => wo.status === status);
+      }
+      if (priority) {
+        filtered = filtered.filter((wo) => wo.priority === priority);
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+
+      if (dueRange === 'overdue') {
+        filtered = filtered.filter((wo) => wo.dueDate < today && (wo.status === 'scheduled' || wo.status === 'in_progress'));
+      } else if (dueRange === 'today') {
+        filtered = filtered.filter((wo) => wo.dueDate === today);
+      } else if (dueRange === 'next7days') {
+        const in7Days = new Date(Date.now() + 86400000 * 7).toISOString().split('T')[0];
+        filtered = filtered.filter((wo) => wo.dueDate >= today && wo.dueDate <= in7Days);
+      }
+
+      const enriched = filtered.map((wo) => {
+        const dueMs = new Date(wo.dueDate + 'T00:00:00').getTime();
+        const nowMs = new Date(today + 'T00:00:00').getTime();
+        const daysUntilDue = Math.round((dueMs - nowMs) / (86400000));
+        const isOverdue = daysUntilDue < 0 && (wo.status === 'scheduled' || wo.status === 'in_progress');
+
+        return {
+          ...wo,
+          plan: planMap.get(wo.planId),
+          machine: machineMap.get(wo.machineId),
+          branch: branchMap.get(wo.branchId),
+          department: deptMap.get(wo.departmentId),
+          assignedEmployee: wo.assignedEmployeeId ? empMap.get(wo.assignedEmployeeId) : null,
+          daysUntilDue,
+          isOverdue,
+        };
+      });
+
+      res.json(enriched);
+    } catch (error: any) {
+      console.error('Error fetching PM work orders:', error);
+      res.status(500).json({ error: 'Failed to fetch PM work orders' });
+    }
+  });
+
+  app.get('/api/pm/work-orders/:id', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const woId = parseInt(req.params.id);
+      const [wo] = await db.select().from(pmWorkOrders).where(eq(pmWorkOrders.id, woId));
+      if (!wo) return res.status(404).json({ error: 'Work order not found' });
+
+      const [plan] = await db.select().from(pmPlans).where(eq(pmPlans.id, wo.planId));
+      const [machine] = await db.select().from(machines).where(eq(machines.id, wo.machineId));
+      const [branch] = await db.select().from(branches).where(eq(branches.id, wo.branchId));
+      const [dept] = await db.select().from(departments).where(eq(departments.id, wo.departmentId));
+      const [emp] = wo.assignedEmployeeId ? await db.select().from(employees).where(eq(employees.id, wo.assignedEmployeeId)) : [null];
+
+      res.json({
+        ...wo,
+        plan,
+        machine,
+        branch,
+        department: dept,
+        assignedEmployee: emp,
+      });
+    } catch (error: any) {
+      console.error('Error fetching work order:', error);
+      res.status(500).json({ error: 'Failed to fetch work order' });
+    }
+  });
+
+  // Auto-generate upcoming due work orders from active schedules
+  app.post('/api/pm/work-orders/generate-due', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const allSchedules = await db.select().from(pmSchedules).where(eq(pmSchedules.status, 'active'));
+      const allPlans = await db.select().from(pmPlans);
+      const allMachines = await db.select().from(machines);
+      const existingWorkOrders = await db.select().from(pmWorkOrders);
+
+      const planMap = new Map(allPlans.map((p) => [p.id, p]));
+      const machineMap = new Map(allMachines.map((m) => [m.id, m]));
+
+      const today = new Date();
+      let createdCount = 0;
+
+      for (const sched of allSchedules) {
+        const leadDays = sched.autoGenerateDaysInAdvance || 7;
+        const horizon = new Date(today.getTime() + 86400000 * leadDays).toISOString().split('T')[0];
+
+        if (sched.nextDueDate <= horizon) {
+          // Check if open WO already exists for this schedule and due date
+          const existingOpen = existingWorkOrders.find(
+            (wo) => wo.scheduleId === sched.id && wo.dueDate === sched.nextDueDate && (wo.status === 'scheduled' || wo.status === 'in_progress')
+          );
+
+          if (!existingOpen) {
+            const plan = planMap.get(sched.planId);
+            const machine = machineMap.get(sched.machineId);
+
+            if (plan && machine) {
+              const woNumber = `WO-PM-${Date.now().toString().slice(-4)}${Math.floor(Math.random() * 90 + 10)}`;
+              await db.insert(pmWorkOrders).values({
+                workOrderNumber: woNumber,
+                scheduleId: sched.id,
+                planId: plan.id,
+                machineId: machine.id,
+                branchId: sched.branchId,
+                departmentId: sched.departmentId,
+                title: `${machine.machineCode} - ${plan.title}`,
+                dueDate: sched.nextDueDate,
+                priority: plan.priority || 'medium',
+                status: 'scheduled',
+                assignedEmployeeId: sched.assignedEmployeeId || null,
+                checklistResults: (plan.checklistTemplate as any[] || []).map((t) => ({
+                  taskId: t.id,
+                  task: t.task,
+                  type: t.type,
+                  status: 'pass',
+                  notes: '',
+                })),
+                partsConsumed: [],
+              });
+              createdCount++;
+            }
+          }
+        }
+      }
+
+      await logEntry(req, 'GENERATE_DUE_PM_WORK_ORDERS', 'pm_work_order', '0', `Auto-generated ${createdCount} scheduled PM work orders.`);
+      res.json({ success: true, createdCount, message: `Generated ${createdCount} new PM work orders based on due schedules.` });
+    } catch (error: any) {
+      console.error('Error generating due work orders:', error);
+      res.status(500).json({ error: error.message || 'Failed to auto-generate due work orders' });
+    }
+  });
+
+  // Start work order
+  app.post('/api/pm/work-orders/:id/start', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const woId = parseInt(req.params.id);
+      const [wo] = await db.select().from(pmWorkOrders).where(eq(pmWorkOrders.id, woId));
+      if (!wo) return res.status(404).json({ error: 'Work order not found' });
+
+      const [updated] = await db.update(pmWorkOrders).set({
+        status: 'in_progress',
+        startedAt: wo.startedAt || new Date(),
+        assignedUserId: req.user?.id || wo.assignedUserId,
+        updatedAt: new Date(),
+      }).where(eq(pmWorkOrders.id, woId)).returning();
+
+      await logEntry(req, 'START_PM_WORK_ORDER', 'pm_work_order', woId, `Started execution on PM work order ${wo.workOrderNumber}`, wo.branchId);
+      res.json(updated);
+    } catch (error: any) {
+      console.error('Error starting work order:', error);
+      res.status(500).json({ error: error.message || 'Failed to start work order' });
+    }
+  });
+
+  // Complete work order & log checklist results & deduct spare parts & advance recurring schedule
+  app.post('/api/pm/work-orders/:id/complete', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const woId = parseInt(req.params.id);
+      const {
+        checklistResults,
+        partsConsumed,
+        overallCondition,
+        summaryNotes,
+        timeSpentMinutes,
+        completedByPin,
+        completedByName,
+        deductFromStock,
+      } = req.body;
+
+      const [wo] = await db.select().from(pmWorkOrders).where(eq(pmWorkOrders.id, woId));
+      if (!wo) return res.status(404).json({ error: 'Work order not found' });
+
+      let verifiedEmployee: any = null;
+      let signoffName = completedByName || req.user?.name || 'Technician';
+
+      // Verify PIN if provided
+      if (completedByPin) {
+        const [emp] = await db.select().from(employees).where(eq(employees.userCode, completedByPin.trim()));
+        if (emp) {
+          verifiedEmployee = emp;
+          signoffName = `${emp.name} (${emp.employeeCode})`;
+        }
+      }
+
+      // Check if any checklist item failed
+      const hasFailure = Array.isArray(checklistResults) && checklistResults.some((r: any) => r.status === 'fail' || r.isOutOfRange);
+      const completionStatus = hasFailure ? 'completed' : 'completed';
+
+      // Process spare parts and fluids deduction from inventory if requested
+      const processedParts: any[] = [];
+      if (Array.isArray(partsConsumed) && partsConsumed.length > 0) {
+        for (const part of partsConsumed) {
+          if (part.quantity && Number(part.quantity) > 0) {
+            let itemDeducted = false;
+            if (deductFromStock !== false && part.itemId) {
+              const [invItem] = await db.select().from(inventoryItems).where(eq(inventoryItems.id, parseInt(part.itemId)));
+              if (invItem) {
+                const newAvailable = Math.max(0, (invItem.availableQuantity || 0) - Number(part.quantity));
+                await db.update(inventoryItems).set({
+                  availableQuantity: newAvailable,
+                  status: newAvailable <= (invItem.minThreshold || 5) ? 'low_stock' : invItem.status,
+                }).where(eq(inventoryItems.id, invItem.id));
+
+                // Log movement
+                await db.insert(inventoryMovements).values({
+                  itemId: invItem.id,
+                  quantity: Number(part.quantity),
+                  uom: invItem.uom,
+                  movementType: 'assigned_to_machine',
+                  status: 'completed',
+                  fromBranchId: wo.branchId,
+                  toBranchId: wo.branchId,
+                  fromDepartmentId: wo.departmentId,
+                  toDepartmentId: wo.departmentId,
+                  toMachineId: wo.machineId,
+                  movedByUserId: req.user?.id || 1,
+                  notes: `Consumed during PM Work Order ${wo.workOrderNumber} on Machine #${wo.machineId}`,
+                });
+                itemDeducted = true;
+              }
+            }
+            processedParts.push({
+              ...part,
+              deductedFromStock: itemDeducted,
+            });
+          }
+        }
+      }
+
+      const completedTime = new Date();
+
+      const [updatedWo] = await db.update(pmWorkOrders).set({
+        status: completionStatus,
+        completedAt: completedTime,
+        completedByEmployeeId: verifiedEmployee ? verifiedEmployee.id : wo.assignedEmployeeId,
+        completedByUserId: req.user?.id || null,
+        completedByPin: completedByPin ? '****' : null,
+        completedByName: signoffName,
+        checklistResults: checklistResults || wo.checklistResults,
+        partsConsumed: processedParts.length > 0 ? processedParts : wo.partsConsumed,
+        overallCondition: overallCondition || 'good',
+        summaryNotes: summaryNotes || null,
+        timeSpentMinutes: timeSpentMinutes ? parseInt(timeSpentMinutes) : (wo.timeSpentMinutes || 30),
+        updatedAt: completedTime,
+      }).where(eq(pmWorkOrders.id, woId)).returning();
+
+      // If this work order originated from a recurring schedule, advance nextDueDate!
+      if (wo.scheduleId) {
+        const [schedule] = await db.select().from(pmSchedules).where(eq(pmSchedules.id, wo.scheduleId));
+        if (schedule) {
+          const todayStr = completedTime.toISOString().split('T')[0];
+          const baseDate = schedule.scheduleType === 'rolling_after_completion' ? todayStr : (schedule.nextDueDate || todayStr);
+          const nextDue = computeNextDueDate(baseDate, schedule.frequencyType, schedule.frequencyInterval);
+
+          await db.update(pmSchedules).set({
+            lastCompletedDate: todayStr,
+            nextDueDate: nextDue,
+            updatedAt: completedTime,
+          }).where(eq(pmSchedules.id, schedule.id));
+        }
+      }
+
+      await logEntry(
+        req,
+        'COMPLETE_PM_WORK_ORDER',
+        'pm_work_order',
+        woId,
+        `Completed PM checklist for ${wo.title} (${wo.workOrderNumber}). Condition: ${overallCondition || 'good'}. Signed by ${signoffName}. Parts: ${processedParts.length} consumed.`,
+        wo.branchId
+      );
+
+      res.json(updatedWo);
+    } catch (error: any) {
+      console.error('Error completing PM work order:', error);
+      res.status(500).json({ error: error.message || 'Failed to complete PM work order' });
+    }
+  });
+
+  // Skip work order with mandatory reason
+  app.post('/api/pm/work-orders/:id/skip', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const woId = parseInt(req.params.id);
+      const { skippedReason } = req.body;
+
+      if (!skippedReason || !skippedReason.trim()) {
+        return res.status(400).json({ error: 'A justification / reason is mandatory to skip scheduled maintenance' });
+      }
+
+      const [wo] = await db.select().from(pmWorkOrders).where(eq(pmWorkOrders.id, woId));
+      if (!wo) return res.status(404).json({ error: 'Work order not found' });
+
+      const [updated] = await db.update(pmWorkOrders).set({
+        status: 'skipped',
+        skippedReason: skippedReason.trim(),
+        completedAt: new Date(),
+        completedByName: req.user?.name || 'Operator',
+        completedByUserId: req.user?.id || null,
+        updatedAt: new Date(),
+      }).where(eq(pmWorkOrders.id, woId)).returning();
+
+      // If linked to a schedule, advance schedule nextDueDate
+      if (wo.scheduleId) {
+        const [schedule] = await db.select().from(pmSchedules).where(eq(pmSchedules.id, wo.scheduleId));
+        if (schedule) {
+          const nextDue = computeNextDueDate(schedule.nextDueDate, schedule.frequencyType, schedule.frequencyInterval);
+          await db.update(pmSchedules).set({
+            nextDueDate: nextDue,
+            updatedAt: new Date(),
+          }).where(eq(pmSchedules.id, schedule.id));
+        }
+      }
+
+      await logEntry(req, 'SKIP_PM_WORK_ORDER', 'pm_work_order', woId, `Skipped scheduled PM work order ${wo.workOrderNumber}. Reason: ${skippedReason}`, wo.branchId);
+      res.json(updated);
+    } catch (error: any) {
+      console.error('Error skipping work order:', error);
+      res.status(500).json({ error: error.message || 'Failed to skip PM work order' });
+    }
+  });
+
+  // 4. PM Compliance & Reliability Reports
+  app.get('/api/pm/compliance-report', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const { branchId, departmentId } = req.query;
+
+      const [allWorkOrders, allSchedules, allPlans, allMachines, allBranches, allDepts] = await Promise.all([
+        db.select().from(pmWorkOrders).orderBy(desc(pmWorkOrders.completedAt)),
+        db.select().from(pmSchedules),
+        db.select().from(pmPlans),
+        db.select().from(machines),
+        db.select().from(branches),
+        db.select().from(departments),
+      ]);
+
+      let filteredWOs = allWorkOrders;
+      let filteredScheds = allSchedules;
+
+      if (req.user?.role === 'manager' || req.user?.role === 'department') {
+        const uBranch = req.user.branchId || 1;
+        filteredWOs = filteredWOs.filter((wo) => wo.branchId === uBranch);
+        filteredScheds = filteredScheds.filter((s) => s.branchId === uBranch);
+        if (req.user.departmentId) {
+          filteredWOs = filteredWOs.filter((wo) => wo.departmentId === req.user?.departmentId);
+          filteredScheds = filteredScheds.filter((s) => s.departmentId === req.user?.departmentId);
+        }
+      } else if (branchId) {
+        filteredWOs = filteredWOs.filter((wo) => wo.branchId === parseInt(branchId as string));
+        filteredScheds = filteredScheds.filter((s) => s.branchId === parseInt(branchId as string));
+      }
+
+      if (departmentId) {
+        filteredWOs = filteredWOs.filter((wo) => wo.departmentId === parseInt(departmentId as string));
+        filteredScheds = filteredScheds.filter((s) => s.departmentId === parseInt(departmentId as string));
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+
+      const totalWorkOrders = filteredWOs.length;
+      const completedCount = filteredWOs.filter((wo) => wo.status === 'completed').length;
+      const scheduledCount = filteredWOs.filter((wo) => wo.status === 'scheduled').length;
+      const inProgressCount = filteredWOs.filter((wo) => wo.status === 'in_progress').length;
+      const skippedCount = filteredWOs.filter((wo) => wo.status === 'skipped').length;
+      const overdueCount = filteredWOs.filter(
+        (wo) => wo.dueDate < today && (wo.status === 'scheduled' || wo.status === 'in_progress')
+      ).length;
+
+      // Calculate on-time completion (completed where completedAt date <= dueDate)
+      const onTimeCompleted = filteredWOs.filter((wo) => {
+        if (wo.status !== 'completed' || !wo.completedAt) return false;
+        const compDateStr = new Date(wo.completedAt).toISOString().split('T')[0];
+        return compDateStr <= wo.dueDate;
+      }).length;
+
+      const nonFutureOrders = filteredWOs.filter((wo) => wo.dueDate <= today || wo.status === 'completed' || wo.status === 'skipped');
+      const complianceRatePercentage = nonFutureOrders.length > 0
+        ? Math.round((completedCount / nonFutureOrders.length) * 100)
+        : (totalWorkOrders > 0 ? 100 : 0);
+
+      const onTimeCompletionRatePercentage = completedCount > 0
+        ? Math.round((onTimeCompleted / completedCount) * 100)
+        : 100;
+
+      // Average duration
+      const completedDurations = filteredWOs
+        .filter((wo) => wo.status === 'completed' && wo.timeSpentMinutes)
+        .map((wo) => wo.timeSpentMinutes || 0);
+      const avgDuration = completedDurations.length > 0
+        ? Math.round(completedDurations.reduce((a, b) => a + b, 0) / completedDurations.length)
+        : 60;
+
+      // Overall Condition Breakdown
+      const conditionBreakdown = {
+        excellent: filteredWOs.filter((wo) => wo.overallCondition === 'excellent').length,
+        good: filteredWOs.filter((wo) => wo.overallCondition === 'good').length,
+        fair: filteredWOs.filter((wo) => wo.overallCondition === 'fair').length,
+        poor: filteredWOs.filter((wo) => wo.overallCondition === 'poor').length,
+        critical: filteredWOs.filter((wo) => wo.overallCondition === 'critical').length,
+      };
+
+      // Category breakdown
+      const planMap = new Map(allPlans.map((p) => [p.id, p]));
+      const machineMap = new Map(allMachines.map((m) => [m.id, m]));
+      const branchMap = new Map(allBranches.map((b) => [b.id, b]));
+      const deptMap = new Map(allDepts.map((d) => [d.id, d]));
+
+      const catTotals: Record<string, { total: number; completed: number }> = {};
+      for (const wo of filteredWOs) {
+        const plan = planMap.get(wo.planId);
+        const cat = plan?.category || 'General';
+        if (!catTotals[cat]) catTotals[cat] = { total: 0, completed: 0 };
+        catTotals[cat].total++;
+        if (wo.status === 'completed') catTotals[cat].completed++;
+      }
+
+      const categoryBreakdown = Object.entries(catTotals).map(([category, stats]) => ({
+        category,
+        total: stats.total,
+        completed: stats.completed,
+      }));
+
+      const recentWOs = filteredWOs.slice(0, 15).map((wo) => ({
+        ...wo,
+        plan: planMap.get(wo.planId),
+        machine: machineMap.get(wo.machineId),
+        branch: branchMap.get(wo.branchId),
+        department: deptMap.get(wo.departmentId),
+      }));
+
+      res.json({
+        totalSchedules: filteredScheds.length,
+        activeSchedules: filteredScheds.filter((s) => s.status === 'active').length,
+        totalWorkOrders,
+        completedCount,
+        scheduledCount,
+        inProgressCount,
+        overdueCount,
+        skippedCount,
+        complianceRatePercentage,
+        onTimeCompletionRatePercentage,
+        avgCompletionDurationMinutes: avgDuration,
+        conditionBreakdown,
+        categoryBreakdown,
+        recentWorkOrders: recentWOs,
+      });
+    } catch (error: any) {
+      console.error('Error computing PM compliance report:', error);
+      res.status(500).json({ error: 'Failed to generate PM compliance report' });
+    }
+  });
+
+  // 5. Notification & Summary Badges for Header / Sidebar / Kiosk
+  app.get('/api/pm/summary-badges', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      const { branchId, departmentId } = req.query;
+      let allWOs = await db.select().from(pmWorkOrders);
+
+      if (req.user?.role === 'manager' || req.user?.role === 'department') {
+        const uBranch = req.user.branchId || 1;
+        allWOs = allWOs.filter((wo) => wo.branchId === uBranch);
+        if (req.user.departmentId) {
+          allWOs = allWOs.filter((wo) => wo.departmentId === req.user?.departmentId);
+        }
+      } else if (branchId) {
+        allWOs = allWOs.filter((wo) => wo.branchId === parseInt(branchId as string));
+      }
+
+      if (departmentId) {
+        allWOs = allWOs.filter((wo) => wo.departmentId === parseInt(departmentId as string));
+      }
+
+      const today = new Date().toISOString().split('T')[0];
+      const in7Days = new Date(Date.now() + 86400000 * 7).toISOString().split('T')[0];
+
+      const activePending = allWOs.filter((wo) => wo.status === 'scheduled' || wo.status === 'in_progress');
+
+      const overdue = activePending.filter((wo) => wo.dueDate < today).length;
+      const dueToday = activePending.filter((wo) => wo.dueDate === today).length;
+      const dueThisWeek = activePending.filter((wo) => wo.dueDate >= today && wo.dueDate <= in7Days).length;
+      const inProgress = allWOs.filter((wo) => wo.status === 'in_progress').length;
+
+      res.json({
+        overdue,
+        dueToday,
+        dueThisWeek,
+        inProgress,
+        totalPending: overdue + dueToday + inProgress,
+      });
+    } catch (error: any) {
+      console.error('Error fetching PM summary badges:', error);
+      res.status(500).json({ error: 'Failed to fetch summary badges' });
+    }
+  });
+
+  // 6. Employee Kiosk PM Checklists (PIN Verified shop floor access)
+  app.post('/api/department/pm-tasks', async (req, res) => {
+    try {
+      const { pin, branchId, departmentId } = req.body;
+      if (!pin) {
+        return res.status(400).json({ error: '4-digit employee PIN is required' });
+      }
+
+      const [employee] = await db.select().from(employees).where(eq(employees.userCode, pin.trim()));
+      if (!employee || !employee.isActive) {
+        return res.status(401).json({ error: 'Invalid or inactive employee PIN' });
+      }
+
+      const bId = branchId ? parseInt(branchId) : employee.branchId;
+      let allWOs = await db.select().from(pmWorkOrders).where(
+        and(
+          eq(pmWorkOrders.branchId, bId),
+          inArray(pmWorkOrders.status, ['scheduled', 'in_progress'])
+        )
+      ).orderBy(pmWorkOrders.dueDate);
+
+      if (departmentId) {
+        allWOs = allWOs.filter((wo) => wo.departmentId === parseInt(departmentId));
+      }
+
+      const [allPlans, allMachines, allBranches, allDepts] = await Promise.all([
+        db.select().from(pmPlans),
+        db.select().from(machines),
+        db.select().from(branches),
+        db.select().from(departments),
+      ]);
+
+      const planMap = new Map(allPlans.map((p) => [p.id, p]));
+      const machineMap = new Map(allMachines.map((m) => [m.id, m]));
+      const branchMap = new Map(allBranches.map((b) => [b.id, b]));
+      const deptMap = new Map(allDepts.map((d) => [d.id, d]));
+
+      const today = new Date().toISOString().split('T')[0];
+
+      const enriched = allWOs.map((wo) => {
+        const isOverdue = wo.dueDate < today;
+        return {
+          ...wo,
+          plan: planMap.get(wo.planId),
+          machine: machineMap.get(wo.machineId),
+          branch: branchMap.get(wo.branchId),
+          department: deptMap.get(wo.departmentId),
+          isOverdue,
+        };
+      });
+
+      res.json({
+        employee: {
+          id: employee.id,
+          name: employee.name,
+          employeeCode: employee.employeeCode,
+          branchId: employee.branchId,
+        },
+        workOrders: enriched,
+      });
+    } catch (error: any) {
+      console.error('Error fetching kiosk PM tasks:', error);
+      res.status(500).json({ error: error.message || 'Failed to fetch kiosk PM tasks' });
+    }
+  });
+
   // 16. Audit / Entry Logs
   app.get('/api/logs', authMiddleware, async (req: AuthRequest, res) => {
     try {
@@ -3041,6 +4073,24 @@ async function startServer() {
         (targetBranch ? m.toBranchId === targetBranch : true)
       );
 
+      // PM Work Orders metrics
+      const allPMWorkOrders = await db.select().from(pmWorkOrders);
+      const todayStr = new Date().toISOString().split('T')[0];
+      const activePMOrders = allPMWorkOrders.filter(wo => 
+        (wo.status === 'scheduled' || wo.status === 'in_progress') &&
+        (targetBranch ? wo.branchId === targetBranch : true)
+      );
+      const overduePMOrders = activePMOrders.filter(wo => wo.dueDate < todayStr);
+      
+      const pastOrDoneOrders = allPMWorkOrders.filter(wo => 
+        (wo.dueDate <= todayStr || wo.status === 'completed' || wo.status === 'skipped') &&
+        (targetBranch ? wo.branchId === targetBranch : true)
+      );
+      const completedPMOrders = pastOrDoneOrders.filter(wo => wo.status === 'completed');
+      const pmCompliance = pastOrDoneOrders.length > 0 
+        ? Math.round((completedPMOrders.length / pastOrDoneOrders.length) * 100) 
+        : 100;
+
       res.json({
         totalAssets: assets.length,
         totalConsumables: consumables.length,
@@ -3051,6 +4101,9 @@ async function startServer() {
         pendingRequestsCount: pendingRequests.length,
         pendingTransfersCount: pendingTransfers.length,
         recentMovementsCount: allMovements.length,
+        pmDueCount: activePMOrders.length,
+        pmOverdueCount: overduePMOrders.length,
+        pmComplianceRate: pmCompliance,
       });
     } catch (error: any) {
       console.error('Error fetching dashboard stats:', error);
@@ -3106,50 +4159,239 @@ async function startServer() {
       const [
         branchesCount,
         departmentsCount,
+        locationsCount,
         machinesCount,
         employeesCount,
+        employeeDepartmentsCount,
         categoriesCount,
+        userCategoryPermissionsCount,
         customFieldsCount,
+        fieldSetsCount,
+        fieldSetItemsCount,
         modelsCount,
         vendorsCount,
+        vendorBranchAssignmentsCount,
+        requestReasonsCount,
         inventoryItemsCount,
+        stockLocationsCount,
         employeeRequestsCount,
         inventoryMovementsCount,
         vendorRepairsCount,
         entryLogsCount,
         usersCount,
+        pmPlansCount,
+        pmSchedulesCount,
+        pmWorkOrdersCount,
       ] = await Promise.all([
         db.select({ count: sql<number>`count(*)` }).from(branches).then(r => Number(r[0]?.count || 0)).catch(() => 0),
         db.select({ count: sql<number>`count(*)` }).from(departments).then(r => Number(r[0]?.count || 0)).catch(() => 0),
+        db.select({ count: sql<number>`count(*)` }).from(locations).then(r => Number(r[0]?.count || 0)).catch(() => 0),
         db.select({ count: sql<number>`count(*)` }).from(machines).then(r => Number(r[0]?.count || 0)).catch(() => 0),
         db.select({ count: sql<number>`count(*)` }).from(employees).then(r => Number(r[0]?.count || 0)).catch(() => 0),
+        db.select({ count: sql<number>`count(*)` }).from(employeeDepartments).then(r => Number(r[0]?.count || 0)).catch(() => 0),
         db.select({ count: sql<number>`count(*)` }).from(categories).then(r => Number(r[0]?.count || 0)).catch(() => 0),
+        db.select({ count: sql<number>`count(*)` }).from(userCategoryPermissions).then(r => Number(r[0]?.count || 0)).catch(() => 0),
         db.select({ count: sql<number>`count(*)` }).from(customFields).then(r => Number(r[0]?.count || 0)).catch(() => 0),
+        db.select({ count: sql<number>`count(*)` }).from(fieldSets).then(r => Number(r[0]?.count || 0)).catch(() => 0),
+        db.select({ count: sql<number>`count(*)` }).from(fieldSetItems).then(r => Number(r[0]?.count || 0)).catch(() => 0),
         db.select({ count: sql<number>`count(*)` }).from(models).then(r => Number(r[0]?.count || 0)).catch(() => 0),
         db.select({ count: sql<number>`count(*)` }).from(vendors).then(r => Number(r[0]?.count || 0)).catch(() => 0),
+        db.select({ count: sql<number>`count(*)` }).from(vendorBranchAssignments).then(r => Number(r[0]?.count || 0)).catch(() => 0),
+        db.select({ count: sql<number>`count(*)` }).from(requestReasons).then(r => Number(r[0]?.count || 0)).catch(() => 0),
         db.select({ count: sql<number>`count(*)` }).from(inventoryItems).then(r => Number(r[0]?.count || 0)).catch(() => 0),
+        db.select({ count: sql<number>`count(*)` }).from(stockLocations).then(r => Number(r[0]?.count || 0)).catch(() => 0),
         db.select({ count: sql<number>`count(*)` }).from(employeeRequests).then(r => Number(r[0]?.count || 0)).catch(() => 0),
         db.select({ count: sql<number>`count(*)` }).from(inventoryMovements).then(r => Number(r[0]?.count || 0)).catch(() => 0),
         db.select({ count: sql<number>`count(*)` }).from(vendorRepairs).then(r => Number(r[0]?.count || 0)).catch(() => 0),
         db.select({ count: sql<number>`count(*)` }).from(entryLogs).then(r => Number(r[0]?.count || 0)).catch(() => 0),
         db.select({ count: sql<number>`count(*)` }).from(users).then(r => Number(r[0]?.count || 0)).catch(() => 0),
+        db.select({ count: sql<number>`count(*)` }).from(pmPlans).then(r => Number(r[0]?.count || 0)).catch(() => 0),
+        db.select({ count: sql<number>`count(*)` }).from(pmSchedules).then(r => Number(r[0]?.count || 0)).catch(() => 0),
+        db.select({ count: sql<number>`count(*)` }).from(pmWorkOrders).then(r => Number(r[0]?.count || 0)).catch(() => 0),
       ]);
 
       const tableStats = [
-        { tableName: 'inventory_items', rowCount: inventoryItemsCount, description: 'Assets & Consumables' },
-        { tableName: 'inventory_movements', rowCount: inventoryMovementsCount, description: 'Stock Transfers & Tracking' },
-        { tableName: 'employee_requests', rowCount: employeeRequestsCount, description: 'Department Issuances & Requisitions' },
-        { tableName: 'vendor_repairs', rowCount: vendorRepairsCount, description: 'Vendor Repairs & Engagements' },
-        { tableName: 'branches', rowCount: branchesCount, description: 'Branch Facilities' },
-        { tableName: 'departments', rowCount: departmentsCount, description: 'Departments & Production Areas' },
-        { tableName: 'machines', rowCount: machinesCount, description: 'Machinery & Equipment' },
-        { tableName: 'employees', rowCount: employeesCount, description: 'Authorized Personnel' },
-        { tableName: 'categories', rowCount: categoriesCount, description: 'Item & Asset Categories' },
-        { tableName: 'custom_fields', rowCount: customFieldsCount, description: 'Dynamic Fields & Specs' },
-        { tableName: 'models', rowCount: modelsCount, description: 'Predefined Asset Models' },
-        { tableName: 'vendors', rowCount: vendorsCount, description: 'Vendors & Suppliers' },
-        { tableName: 'entry_logs', rowCount: entryLogsCount, description: 'Immutable Audit Trail Logs' },
-        { tableName: 'users', rowCount: usersCount, description: 'System Users & Role Access' },
+        // 1. Inventory & Stock Quantities
+        {
+          tableName: 'inventory_items',
+          rowCount: inventoryItemsCount,
+          description: 'Assets & Consumables Catalog Items',
+          group: 'inventory' as const,
+          impactNote: 'Wipes all master asset and consumable stock records, serials, and quantities.',
+        },
+        {
+          tableName: 'stock_locations',
+          rowCount: stockLocationsCount,
+          description: 'Stock Location Allocations',
+          group: 'inventory' as const,
+          impactNote: 'Clears stock allocation balances across branch/department locations and machines.',
+        },
+        // 2. Operational Logs & Workflows
+        {
+          tableName: 'pm_work_orders',
+          rowCount: pmWorkOrdersCount,
+          description: 'PM Work Orders & Completed Checklists',
+          group: 'operations' as const,
+          impactNote: 'Wipes active and completed machine maintenance work orders, technician measurements, and condition logs.',
+        },
+        {
+          tableName: 'pm_schedules',
+          rowCount: pmSchedulesCount,
+          description: 'PM Machine Recurring Schedules',
+          group: 'operations' as const,
+          impactNote: 'Clears machine maintenance frequency assignments, next due dates, and auto-generation links.',
+        },
+        {
+          tableName: 'pm_plans',
+          rowCount: pmPlansCount,
+          description: 'PM Master Plans & Checklist Templates',
+          group: 'catalog' as const,
+          impactNote: 'Deletes master maintenance task templates, required spare parts lists, and safety guidelines.',
+        },
+        {
+          tableName: 'inventory_movements',
+          rowCount: inventoryMovementsCount,
+          description: 'Stock Transfers & Tracking History',
+          group: 'operations' as const,
+          impactNote: 'Clears transfer logs, branch-to-branch moves, and machine assignment logs.',
+        },
+        {
+          tableName: 'employee_requests',
+          rowCount: employeeRequestsCount,
+          description: 'Department Issuances & Requisitions',
+          group: 'operations' as const,
+          impactNote: 'Wipes punch portal requisitions, PIN verifications, and issuance audit records.',
+        },
+        {
+          tableName: 'vendor_repairs',
+          rowCount: vendorRepairsCount,
+          description: 'Vendor Repairs & Engagements',
+          group: 'operations' as const,
+          impactNote: 'Clears maintenance work orders, repair logs, and asset downtime history.',
+        },
+        // 3. Catalogs & Specifications
+        {
+          tableName: 'models',
+          rowCount: modelsCount,
+          description: 'Predefined Asset Models',
+          group: 'catalog' as const,
+          impactNote: 'Deletes model templates, photos, and manufacturer specifications.',
+        },
+        {
+          tableName: 'field_sets',
+          rowCount: fieldSetsCount,
+          description: 'Field Set Groupings',
+          group: 'catalog' as const,
+          impactNote: 'Clears dynamic custom field groupings.',
+        },
+        {
+          tableName: 'field_set_items',
+          rowCount: fieldSetItemsCount,
+          description: 'Field Set Associations',
+          group: 'catalog' as const,
+          impactNote: 'Clears field set mapping links.',
+        },
+        {
+          tableName: 'custom_fields',
+          rowCount: customFieldsCount,
+          description: 'Dynamic Custom Fields',
+          group: 'catalog' as const,
+          impactNote: 'Removes category-specific custom attributes and specifications.',
+        },
+        {
+          tableName: 'categories',
+          rowCount: categoriesCount,
+          description: 'Item & Asset Categories',
+          group: 'catalog' as const,
+          impactNote: 'Removes all category definitions (cascades to models & items if not empty).',
+        },
+        {
+          tableName: 'request_reasons',
+          rowCount: requestReasonsCount,
+          description: 'Pre-fed Requisition Reasons',
+          group: 'catalog' as const,
+          impactNote: 'Wipes standard preset reasons for department employee punch requests.',
+        },
+        // 4. Vendors & External Partners
+        {
+          tableName: 'vendors',
+          rowCount: vendorsCount,
+          description: 'Vendors & Suppliers',
+          group: 'vendors' as const,
+          impactNote: 'Clears vendor directory and contact profiles.',
+        },
+        {
+          tableName: 'vendor_branch_assignments',
+          rowCount: vendorBranchAssignmentsCount,
+          description: 'Vendor Branch Visibility Rules',
+          group: 'vendors' as const,
+          impactNote: 'Clears cross-branch vendor access mappings.',
+        },
+        // 5. Organizational Structure
+        {
+          tableName: 'machines',
+          rowCount: machinesCount,
+          description: 'Machinery & Equipment',
+          group: 'organization' as const,
+          impactNote: 'Wipes production machines, tooling equipment, and machine codes.',
+        },
+        {
+          tableName: 'locations',
+          rowCount: locationsCount,
+          description: 'Storage Locations & Racks',
+          group: 'organization' as const,
+          impactNote: 'Wipes bays, racks, cleanrooms, and warehouse storage locations.',
+        },
+        {
+          tableName: 'employees',
+          rowCount: employeesCount,
+          description: 'Authorized Personnel',
+          group: 'organization' as const,
+          impactNote: 'Wipes registered employees, employee codes, and 4-digit PINs.',
+        },
+        {
+          tableName: 'employee_departments',
+          rowCount: employeeDepartmentsCount,
+          description: 'Employee Department Links',
+          group: 'organization' as const,
+          impactNote: 'Clears employee-to-department assignments.',
+        },
+        {
+          tableName: 'departments',
+          rowCount: departmentsCount,
+          description: 'Departments & Production Areas',
+          group: 'organization' as const,
+          impactNote: 'Deletes department divisions and shop floor areas.',
+        },
+        {
+          tableName: 'branches',
+          rowCount: branchesCount,
+          description: 'Branch Facilities',
+          group: 'organization' as const,
+          impactNote: 'Deletes branch locations and warehouse facilities.',
+        },
+        // 6. Security & Audit
+        {
+          tableName: 'user_category_permissions',
+          rowCount: userCategoryPermissionsCount,
+          description: 'User Category Access Permissions',
+          group: 'security' as const,
+          impactNote: 'Clears role-based category restriction assignments.',
+        },
+        {
+          tableName: 'entry_logs',
+          rowCount: entryLogsCount,
+          description: 'Immutable Audit Trail Logs',
+          group: 'security' as const,
+          impactNote: 'Clears system activity and user audit trail history.',
+        },
+        {
+          tableName: 'users',
+          rowCount: usersCount,
+          description: 'System Users & Role Access',
+          group: 'security' as const,
+          impactNote: 'Resets user logins (Administrator account is automatically preserved).',
+        },
       ];
 
       const port = process.env.SQL_PORT ? parseInt(process.env.SQL_PORT) : (process.env.PGPORT ? parseInt(process.env.PGPORT) : 5432);
@@ -3310,6 +4552,112 @@ async function startServer() {
     } catch (error: any) {
       console.error('Error checking schema status:', error);
       res.status(500).json({ error: error.message || 'Failed to check schema status' });
+    }
+  });
+
+  // Admin Data Table Reset / Purge Endpoint
+  app.post('/api/postgres-config/reset-tables', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      if (req.user?.role !== 'admin') {
+        return res.status(403).json({
+          error: 'Access Denied: Only Administrator role has authorization to reset database tables.',
+        });
+      }
+
+      const { tables, reseedDemo } = req.body;
+
+      if (!Array.isArray(tables) || tables.length === 0) {
+        return res.status(400).json({ error: 'Please select at least one table to reset.' });
+      }
+
+      // Whitelist validation: Ensure all requested tables exist in SCHEMA_TABLES
+      const invalidTables = tables.filter((t: string) => !SCHEMA_TABLES.includes(t));
+      if (invalidTables.length > 0) {
+        return res.status(400).json({
+          error: `Invalid table name(s) requested: ${invalidTables.join(', ')}`,
+        });
+      }
+
+      const validTables: string[] = tables.filter((t: string) => SCHEMA_TABLES.includes(t));
+
+      if (reseedDemo) {
+        // If user requested complete wipe and demo dataset reseed
+        await seedDatabase(true);
+        await logEntry(
+          req,
+          'RESET_AND_RESEED_DATABASE',
+          'SYSTEM_DATABASE',
+          'ALL',
+          `Full database reset and comprehensive demo dataset re-seeded by Administrator ${req.user.name}`
+        );
+
+        return res.json({
+          success: true,
+          message: 'All tables reset and fresh demo dataset seeded successfully!',
+          resetTables: SCHEMA_TABLES,
+          reseeded: true,
+        });
+      }
+
+      // Truncate selected tables with restart identity and cascade
+      const quotedTableNames = validTables.map((t) => `"${t}"`).join(', ');
+      await pool.query(`TRUNCATE TABLE ${quotedTableNames} RESTART IDENTITY CASCADE;`);
+
+      // Safety preservation: If 'users' table was truncated, immediately re-create active Admin account
+      if (validTables.includes('users')) {
+        const envAdminEmail = (process.env.ADMIN_EMAIL || process.env.ADMIN_USER || 'admin@company.local').trim().toLowerCase();
+        const envAdminPass = (process.env.ADMIN_PASSWORD || 'admin123').trim();
+        const currentAdminName = req.user?.name || process.env.ADMIN_NAME || 'System Administrator';
+        const currentAdminEmail = req.user?.email || envAdminEmail;
+        const currentAdminUid = req.user?.uid || `admin_${Date.now()}`;
+        const adminHash = hashPassword(envAdminPass);
+
+        await db.insert(users).values({
+          uid: currentAdminUid,
+          name: currentAdminName,
+          email: currentAdminEmail,
+          password: adminHash,
+          role: 'admin',
+          isActive: true,
+        });
+
+        console.log(`[PostgreSQL] Safely preserved and re-created active Admin user (${currentAdminEmail}) after users table reset.`);
+      }
+
+      // Safety preservation: If 'branches' was reset, ensure at least a default branch exists if needed
+      if (validTables.includes('branches') && !validTables.includes('departments')) {
+        const [defaultBranch] = await db.insert(branches).values({
+          name: 'Main Facility & Headquarters',
+          code: 'BR-MAIN',
+          location: 'Headquarters Facility',
+          phone: '+1 555-0100',
+        }).returning();
+
+        if (defaultBranch && req.user?.id) {
+          try {
+            await db.update(users).set({ branchId: defaultBranch.id }).where(eq(users.id, req.user.id));
+          } catch (_) {}
+        }
+      }
+
+      // Log the reset action in audit logs (even if entry_logs was truncated, write this new entry)
+      await logEntry(
+        req,
+        'RESET_DATABASE_TABLES',
+        'SYSTEM_DATABASE',
+        validTables.length,
+        `Admin ${req.user.name} (${req.user.email}) permanently reset ${validTables.length} table(s): ${validTables.join(', ')}`
+      );
+
+      res.json({
+        success: true,
+        message: `Successfully reset data in ${validTables.length} selected table(s).`,
+        resetTables: validTables,
+        clearedCount: validTables.length,
+      });
+    } catch (error: any) {
+      console.error('Error resetting database tables:', error);
+      res.status(500).json({ error: error.message || 'Failed to reset selected database tables' });
     }
   });
 

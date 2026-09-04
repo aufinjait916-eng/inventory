@@ -12,10 +12,12 @@ import {
   TrendingDown,
   Activity,
   Layers,
+  CalendarClock,
+  Check,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.tsx';
 import { fetchApi } from '../lib/api.ts';
-import { InventoryItem, EmployeeRequest, VendorRepair, Movement } from '../types.ts';
+import { InventoryItem, EmployeeRequest, VendorRepair, Movement, PMWorkOrder } from '../types.ts';
 import { NavTab } from './Sidebar.tsx';
 
 interface DashboardViewProps {
@@ -28,6 +30,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
   const [pendingRequests, setPendingRequests] = useState<EmployeeRequest[]>([]);
   const [activeRepairs, setActiveRepairs] = useState<VendorRepair[]>([]);
   const [recentMovements, setRecentMovements] = useState<Movement[]>([]);
+  const [duePMWorkOrders, setDuePMWorkOrders] = useState<PMWorkOrder[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
   const currentBranch = branches.find((b) => b.id === currentBranchId);
@@ -36,11 +39,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
     async function loadData() {
       try {
         setLoading(true);
-        const [inv, reqs, reps, movs] = await Promise.all([
+        const [inv, reqs, reps, movs, pms] = await Promise.all([
           fetchApi<InventoryItem[]>(`/api/inventory?branchId=${currentBranchId}`),
           fetchApi<EmployeeRequest[]>(`/api/requests?branchId=${currentBranchId}&status=pending`),
           fetchApi<VendorRepair[]>(`/api/repairs?branchId=${currentBranchId}&status=sent_to_vendor`),
           fetchApi<Movement[]>(`/api/movements?branchId=${currentBranchId}`),
+          fetchApi<PMWorkOrder[]>(`/api/pm/work-orders?branchId=${currentBranchId}`),
         ]);
 
         const lows = (inv || []).filter((i) => i.availableQuantity <= i.minThreshold);
@@ -48,6 +52,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
         setPendingRequests(reqs || []);
         setActiveRepairs(reps || []);
         setRecentMovements((movs || []).slice(0, 5));
+        setDuePMWorkOrders((pms || []).filter((wo) => wo.status !== 'completed' && wo.status !== 'skipped'));
       } catch (err) {
         console.error('Failed to load dashboard:', err);
       } finally {
@@ -64,7 +69,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 text-xs font-semibold border border-blue-500/30 mb-2">
             <Activity className="w-3.5 h-3.5" />
-            <span>Organization Stock Control</span>
+            <span>Organization Stock Control & Machine Maintenance</span>
           </div>
           <h2 className="text-2xl font-extrabold tracking-tight">
             {currentRole === 'admin' || currentRole === 'super_manager'
@@ -72,28 +77,27 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
               : `Branch Portal: ${currentBranch ? currentBranch.name : 'Central Plant'}`}
           </h2>
           <p className="text-slate-400 text-xs mt-1 max-w-2xl">
-            Real-time multi-branch asset tracking, consumable levels, employee requests with 4-digit security punch, machine allocation, and vendor repair logs.
+            Real-time multi-branch asset tracking, consumable levels, preventive maintenance schedules, employee PIN punch requisitions, and machine servicing.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            id="dash-btn-pm"
+            onClick={() => setActiveTab('preventive_maintenance')}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-blue-600/30 flex items-center gap-2 cursor-pointer"
+          >
+            <CalendarClock className="w-4 h-4" />
+            <span>Preventive Maintenance</span>
+          </button>
           <button
             id="dash-btn-kiosk"
             onClick={() => setActiveTab('department_portal')}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition shadow-lg shadow-blue-600/30 flex items-center gap-2"
+            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition border border-slate-700 flex items-center gap-2 cursor-pointer"
           >
-            <span>Employee Request Kiosk</span>
+            <span>Operator PIN Kiosk</span>
             <ArrowRight className="w-4 h-4" />
           </button>
-          {(currentRole === 'admin' || currentRole === 'super_manager') && (
-            <button
-              id="dash-btn-new-item"
-              onClick={() => setActiveTab('create_item')}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition border border-slate-700"
-            >
-              + New Stock Item
-            </button>
-          )}
         </div>
       </div>
 
@@ -119,20 +123,35 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
         </div>
 
         <div
-          onClick={() => setActiveTab('inventory')}
-          className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-xs hover:border-emerald-400 transition cursor-pointer group"
+          onClick={() => setActiveTab('preventive_maintenance')}
+          className={`bg-white p-5 rounded-xl border shadow-xs transition cursor-pointer group ${
+            (dashboardStats?.pmOverdueCount || 0) > 0
+              ? 'border-rose-300 bg-rose-50/20'
+              : 'border-slate-200/80 hover:border-blue-400'
+          }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Consumables</span>
-            <div className="p-2.5 rounded-lg bg-emerald-50 text-emerald-600 group-hover:scale-110 transition">
-              <Package className="w-5 h-5" />
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">PM Maintenance</span>
+            <div className={`p-2.5 rounded-lg transition ${
+              (dashboardStats?.pmOverdueCount || 0) > 0 ? 'bg-rose-100 text-rose-700' : 'bg-blue-50 text-blue-600 group-hover:scale-110'
+            }`}>
+              <CalendarClock className="w-5 h-5" />
             </div>
           </div>
           <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-3xl font-black text-slate-900">{dashboardStats?.totalConsumables ?? 0}</span>
-            <span className="text-xs font-medium text-slate-500">SKUs by UOM</span>
+            <span className={`text-3xl font-black ${
+              (dashboardStats?.pmOverdueCount || 0) > 0 ? 'text-rose-700' : 'text-slate-900'
+            }`}>
+              {dashboardStats?.pmDueCount ?? duePMWorkOrders.length}
+            </span>
+            <span className="text-xs font-medium text-slate-500">Orders Active</span>
           </div>
-          <p className="mt-1 text-xs text-emerald-600 font-medium">Lubricants, PPE, Fasteners</p>
+          <p className="mt-1 text-xs text-slate-600 font-medium flex items-center gap-1">
+            <span>Compliance: <strong>{dashboardStats?.pmComplianceRate ?? 100}%</strong></span>
+            {(dashboardStats?.pmOverdueCount || 0) > 0 && (
+              <span className="text-rose-600 font-bold ml-1">({dashboardStats?.pmOverdueCount} Overdue)</span>
+            )}
+          </p>
         </div>
 
         <div
@@ -341,6 +360,69 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ setActiveTab }) =>
             <span>Engagement duration calculated before repair or decommissioning</span>
             <span className="font-mono font-semibold text-slate-600">Lifetime Metric</span>
           </div>
+        </div>
+      </div>
+
+      {/* Preventive Maintenance Overview Widget */}
+      <div className="bg-white rounded-xl border border-slate-200/80 p-5 shadow-xs">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <CalendarClock className="w-4 h-4 text-blue-600" />
+            <h3 className="text-sm font-bold text-slate-800">Preventive Maintenance Schedule & Due Tasks</h3>
+          </div>
+          <button
+            onClick={() => setActiveTab('preventive_maintenance')}
+            className="text-xs text-blue-600 hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+          >
+            <span>Open PM Manager</span>
+            <ArrowRight className="w-3 h-3" />
+          </button>
+        </div>
+
+        <div className="mt-3">
+          {duePMWorkOrders.length === 0 ? (
+            <div className="py-6 text-center text-slate-600 text-xs">
+              <CheckCircle2 className="w-7 h-7 mx-auto text-emerald-600 mb-1" />
+              <p className="font-semibold">All machinery & asset preventive maintenance is currently up to date.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {duePMWorkOrders.slice(0, 6).map((wo) => {
+                const isOverdue = wo.isOverdue;
+                return (
+                  <div
+                    key={wo.id}
+                    onClick={() => setActiveTab('preventive_maintenance')}
+                    className={`p-3 rounded-lg border transition flex flex-col justify-between cursor-pointer ${
+                      isOverdue ? 'border-rose-300 bg-rose-50/40 hover:bg-rose-50' : 'border-slate-200 bg-slate-50 hover:bg-blue-50/50'
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between gap-1 mb-1">
+                        <span className="font-mono text-[10px] font-bold text-slate-700">{wo.workOrderNumber}</span>
+                        {isOverdue ? (
+                          <span className="text-[9px] font-bold uppercase tracking-wider bg-rose-600 text-white px-1.5 py-0.5 rounded">
+                            OVERDUE
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-bold uppercase tracking-wider bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">
+                            {wo.status}
+                          </span>
+                        )}
+                      </div>
+                      <p className="font-bold text-slate-800 text-xs truncate">{wo.title}</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5">Machine: {wo.machine?.name || 'Machine'}</p>
+                    </div>
+
+                    <div className="mt-2 pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
+                      <span className="text-slate-500">Due: <strong className={isOverdue ? 'text-rose-600' : 'text-slate-700'}>{wo.dueDate}</strong></span>
+                      <span className="text-blue-600 font-bold hover:underline">Execute &rarr;</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       </div>
 

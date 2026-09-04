@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Database,
   Server,
@@ -26,16 +26,30 @@ import {
   KeyRound,
   Network,
   Container,
+  RotateCcw,
+  Trash2,
+  Filter,
+  Search,
+  AlertTriangle,
+  CheckSquare,
+  Square,
+  Boxes,
+  FolderKanban,
+  Building2,
+  ScrollText,
+  Users,
+  X,
+  ShieldAlert,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.tsx';
 import { fetchApi } from '../lib/api.ts';
-import { PostgresConfigInfo, DbConnectionTestResult } from '../types.ts';
+import { PostgresConfigInfo, DbConnectionTestResult, DbTableStat } from '../types.ts';
 
 export const PostgresConfigView: React.FC = () => {
   const { showToast, currentRole } = useApp();
   const [config, setConfig] = useState<PostgresConfigInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeSubTab, setActiveSubTab] = useState<'diagnostics' | 'tester' | 'truenas' | 'docker_ci'>('diagnostics');
+  const [activeSubTab, setActiveSubTab] = useState<'diagnostics' | 'table_reset' | 'tester' | 'truenas' | 'docker_ci'>('diagnostics');
 
   // Connection Tester State
   const [testMode, setTestMode] = useState<'params' | 'uri'>('params');
@@ -48,6 +62,15 @@ export const PostgresConfigView: React.FC = () => {
   const [testUri, setTestUri] = useState('');
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<DbConnectionTestResult | null>(null);
+
+  // Table Reset & Purge State (Admin)
+  const [selectedTables, setSelectedTables] = useState<string[]>([]);
+  const [tableSearchQuery, setTableSearchQuery] = useState('');
+  const [groupFilter, setGroupFilter] = useState<string>('all');
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetConfirmed, setResetConfirmed] = useState(false);
+  const [reseedDemoOnReset, setReseedDemoOnReset] = useState(false);
 
   // Maintenance State
   const [vacuuming, setVacuuming] = useState(false);
@@ -154,6 +177,117 @@ export const PostgresConfigView: React.FC = () => {
     showToast('Copied to clipboard!', 'success');
     setTimeout(() => setCopiedKey(null), 2500);
   };
+
+  // Table selection and preset helpers (Admin)
+  const allTableNames = useMemo(() => config?.tableStats?.map((t) => t.tableName) || [], [config]);
+
+  const selectPreset = (preset: 'operations' | 'catalog' | 'organization' | 'logs' | 'all' | 'none') => {
+    if (!config?.tableStats) return;
+    if (preset === 'none') {
+      setSelectedTables([]);
+      return;
+    }
+    if (preset === 'all') {
+      setSelectedTables([...allTableNames]);
+      return;
+    }
+    if (preset === 'operations') {
+      const opsTables = ['inventory_items', 'stock_locations', 'inventory_movements', 'employee_requests', 'vendor_repairs'];
+      setSelectedTables(opsTables.filter((t) => allTableNames.includes(t)));
+      return;
+    }
+    if (preset === 'catalog') {
+      const catTables = ['models', 'field_sets', 'field_set_items', 'custom_fields', 'categories', 'request_reasons'];
+      setSelectedTables(catTables.filter((t) => allTableNames.includes(t)));
+      return;
+    }
+    if (preset === 'organization') {
+      const orgTables = ['employees', 'employee_departments', 'machines', 'locations', 'departments', 'branches'];
+      setSelectedTables(orgTables.filter((t) => allTableNames.includes(t)));
+      return;
+    }
+    if (preset === 'logs') {
+      setSelectedTables(['entry_logs']);
+      return;
+    }
+  };
+
+  const toggleTableSelection = (tableName: string) => {
+    setSelectedTables((prev) =>
+      prev.includes(tableName) ? prev.filter((t) => t !== tableName) : [...prev, tableName]
+    );
+  };
+
+  const handleQuickResetTable = (tableName: string) => {
+    setSelectedTables([tableName]);
+    setResetConfirmed(false);
+    setReseedDemoOnReset(false);
+    setIsResetModalOpen(true);
+  };
+
+  const handleOpenResetModal = () => {
+    if (selectedTables.length === 0) {
+      showToast('Please select at least one datatable to reset', 'error');
+      return;
+    }
+    setResetConfirmed(false);
+    setIsResetModalOpen(true);
+  };
+
+  const handleExecuteReset = async () => {
+    if (selectedTables.length === 0) {
+      showToast('Please select at least one table to reset', 'error');
+      return;
+    }
+    try {
+      setResetting(true);
+      const res = await fetchApi<{
+        success: boolean;
+        message: string;
+        resetTables: string[];
+        reseeded?: boolean;
+      }>('/api/postgres-config/reset-tables', {
+        method: 'POST',
+        body: JSON.stringify({
+          tables: selectedTables,
+          reseedDemo: reseedDemoOnReset,
+        }),
+      });
+
+      showToast(res.message || `Successfully reset ${selectedTables.length} table(s)!`, 'success');
+      setIsResetModalOpen(false);
+      setSelectedTables([]);
+      setResetConfirmed(false);
+      setReseedDemoOnReset(false);
+      await loadConfig();
+    } catch (err: any) {
+      console.error('Reset error:', err);
+      showToast(err.message || 'Failed to reset tables', 'error');
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  const filteredTableStats = useMemo(() => {
+    if (!config?.tableStats) return [];
+    return config.tableStats.filter((t) => {
+      const q = tableSearchQuery.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        t.tableName.toLowerCase().includes(q) ||
+        t.description.toLowerCase().includes(q) ||
+        (t.impactNote && t.impactNote.toLowerCase().includes(q));
+      const matchesGroup = groupFilter === 'all' || t.group === groupFilter;
+      return matchesSearch && matchesGroup;
+    });
+  }, [config, tableSearchQuery, groupFilter]);
+
+  const selectedRecordsCount = useMemo(() => {
+    if (!config?.tableStats) return 0;
+    return config.tableStats
+      .filter((t) => selectedTables.includes(t.tableName))
+      .reduce((acc, curr) => acc + curr.rowCount, 0);
+  }, [config, selectedTables]);
 
   const totalRecords = config?.tableStats?.reduce((acc, curr) => acc + curr.rowCount, 0) || 0;
 
@@ -531,6 +665,21 @@ GEMINI_API_KEY=
           <span>Live Schema & Diagnostics</span>
         </button>
 
+        {currentRole === 'admin' && (
+          <button
+            onClick={() => setActiveSubTab('table_reset')}
+            className={`px-4 py-2 text-xs font-bold rounded-xl transition flex items-center gap-2 cursor-pointer ${
+              activeSubTab === 'table_reset'
+                ? 'bg-rose-600 text-white shadow-xs'
+                : 'text-rose-700 bg-rose-50/80 hover:bg-rose-100 border border-rose-200'
+            }`}
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span>Reset Datatables</span>
+            <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-rose-200 text-rose-900 font-bold">Admin</span>
+          </button>
+        )}
+
         <button
           onClick={() => setActiveSubTab('tester')}
           className={`px-4 py-2 text-xs font-bold rounded-xl transition flex items-center gap-2 cursor-pointer ${
@@ -690,22 +839,302 @@ GEMINI_API_KEY=
                 {config?.tableStats.map((tab) => (
                   <div
                     key={tab.tableName}
-                    className="p-3.5 rounded-xl border border-slate-200/90 bg-slate-50/70 hover:bg-white hover:border-blue-300 transition flex items-center justify-between text-xs"
+                    className="p-3.5 rounded-xl border border-slate-200/90 bg-slate-50/70 hover:bg-white hover:border-blue-300 transition flex items-center justify-between text-xs group"
                   >
-                    <div>
-                      <p className="font-bold text-slate-900">{tab.description}</p>
+                    <div className="min-w-0 pr-2">
+                      <p className="font-bold text-slate-900 truncate">{tab.description}</p>
                       <p className="font-mono text-[11px] text-slate-400 mt-0.5">{tab.tableName}</p>
                     </div>
-                    <div className="text-right">
+                    <div className="flex items-center gap-2 shrink-0">
                       <span className="px-2.5 py-1 rounded-lg font-mono font-bold text-slate-800 bg-white border border-slate-200 text-xs shadow-2xs">
                         {tab.rowCount.toLocaleString()}
                       </span>
+                      {currentRole === 'admin' && (
+                        <button
+                          type="button"
+                          onClick={() => handleQuickResetTable(tab.tableName)}
+                          title={`Reset ${tab.tableName}`}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-200 transition cursor-pointer"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Sub-Tab: Admin Table Reset / Data Purge */}
+      {activeSubTab === 'table_reset' && currentRole === 'admin' && (
+        <div className="space-y-6">
+          {/* Top Control Banner */}
+          <div className="bg-white rounded-2xl border border-rose-200/80 p-6 shadow-xs space-y-4">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="p-2 bg-rose-100 text-rose-700 rounded-xl">
+                    <RotateCcw className="w-5 h-5" />
+                  </span>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900">Selective Database Table Reset</h3>
+                    <p className="text-xs text-slate-500">
+                      Select one or multiple datatables to clear. Uses PostgreSQL <code className="font-mono bg-rose-50 text-rose-800 px-1 py-0.5 rounded text-[11px]">TRUNCATE ... RESTART IDENTITY CASCADE</code> to reset IDs to 1.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleOpenResetModal}
+                  disabled={selectedTables.length === 0}
+                  className={`px-4 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer shadow-xs ${
+                    selectedTables.length > 0
+                      ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                      : 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+                  }`}
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Reset Selected ({selectedTables.length})</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Presets Bar */}
+            <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-slate-600 mr-1 flex items-center gap-1">
+                <Boxes className="w-3.5 h-3.5 text-slate-400" />
+                <span>Quick Presets:</span>
+              </span>
+
+              <button
+                type="button"
+                onClick={() => selectPreset('operations')}
+                className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5"
+              >
+                <span>📦 Operational & Stock</span>
+                <span className="text-[10px] bg-amber-200/80 px-1.5 py-0.2 rounded-full font-mono">5 tables</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => selectPreset('catalog')}
+                className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5"
+              >
+                <span>🏷️ Catalogs & Models</span>
+                <span className="text-[10px] bg-blue-200/80 px-1.5 py-0.2 rounded-full font-mono">6 tables</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => selectPreset('organization')}
+                className="px-3 py-1.5 bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5"
+              >
+                <span>🏢 Org & Personnel</span>
+                <span className="text-[10px] bg-purple-200/80 px-1.5 py-0.2 rounded-full font-mono">6 tables</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => selectPreset('logs')}
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5"
+              >
+                <span>📜 Audit Logs Only</span>
+                <span className="text-[10px] bg-slate-300/80 px-1.5 py-0.2 rounded-full font-mono">1 table</span>
+              </button>
+
+              <div className="h-4 w-px bg-slate-200 mx-1 hidden sm:block" />
+
+              <button
+                type="button"
+                onClick={() => selectPreset('all')}
+                className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1"
+              >
+                <span>Select All ({allTableNames.length})</span>
+              </button>
+
+              {selectedTables.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => selectPreset('none')}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1"
+                >
+                  <X className="w-3 h-3" />
+                  <span>Clear Selection</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Search & Group Filter Toolbar */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="relative flex-1 max-w-md">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={tableSearchQuery}
+                onChange={(e) => setTableSearchQuery(e.target.value)}
+                placeholder="Search tables, descriptions, or impact..."
+                className="w-full pl-9.5 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500 shadow-2xs"
+              />
+              {tableSearchQuery && (
+                <button
+                  onClick={() => setTableSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Group Pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+              {[
+                { id: 'all', label: 'All Tables' },
+                { id: 'inventory', label: 'Inventory' },
+                { id: 'operations', label: 'Operations' },
+                { id: 'catalog', label: 'Catalog' },
+                { id: 'vendors', label: 'Vendors' },
+                { id: 'organization', label: 'Organization' },
+                { id: 'security', label: 'Security' },
+              ].map((g) => (
+                <button
+                  key={g.id}
+                  onClick={() => setGroupFilter(g.id)}
+                  className={`px-3 py-1.5 rounded-lg font-medium transition whitespace-nowrap cursor-pointer ${
+                    groupFilter === g.id
+                      ? 'bg-slate-900 text-white shadow-2xs'
+                      : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                  }`}
+                >
+                  {g.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Table Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredTableStats.map((tab) => {
+              const isSelected = selectedTables.includes(tab.tableName);
+              return (
+                <div
+                  key={tab.tableName}
+                  onClick={() => toggleTableSelection(tab.tableName)}
+                  className={`relative p-4 rounded-2xl border transition cursor-pointer flex flex-col justify-between ${
+                    isSelected
+                      ? 'bg-rose-50/60 border-rose-300 ring-2 ring-rose-500/20 shadow-xs'
+                      : 'bg-white border-slate-200/90 hover:border-slate-300 hover:shadow-xs'
+                  }`}
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className={`w-5 h-5 rounded-md flex items-center justify-center transition ${
+                            isSelected
+                              ? 'bg-rose-600 text-white'
+                              : 'border border-slate-300 bg-white text-transparent'
+                          }`}
+                        >
+                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-slate-900 text-xs">{tab.description}</p>
+                          <code className="font-mono text-[11px] text-slate-500">{tab.tableName}</code>
+                        </div>
+                      </div>
+
+                      <span
+                        className={`px-2 py-0.5 rounded-md font-mono text-[11px] font-bold shrink-0 ${
+                          tab.rowCount > 0
+                            ? 'bg-slate-100 text-slate-800 border border-slate-200'
+                            : 'bg-slate-50 text-slate-400 border border-slate-100'
+                        }`}
+                      >
+                        {tab.rowCount.toLocaleString()} {tab.rowCount === 1 ? 'row' : 'rows'}
+                      </span>
+                    </div>
+
+                    {tab.impactNote && (
+                      <p className="text-[11px] text-slate-500 leading-relaxed pl-7.5">
+                        {tab.impactNote}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="pt-3 mt-3 border-t border-slate-100 flex items-center justify-between text-[11px]">
+                    <span className="capitalize px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600">
+                      {tab.group || 'general'}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleQuickResetTable(tab.tableName);
+                      }}
+                      className="text-rose-600 hover:text-rose-800 hover:underline font-semibold flex items-center gap-1 cursor-pointer"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Reset this table</span>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {filteredTableStats.length === 0 && (
+            <div className="text-center py-12 bg-white rounded-2xl border border-slate-200 p-8 space-y-2">
+              <AlertCircle className="w-8 h-8 text-slate-300 mx-auto" />
+              <p className="font-bold text-slate-700 text-sm">No datatables matched your search</p>
+              <p className="text-xs text-slate-400">Try clearing the search query or group filter.</p>
+            </div>
+          )}
+
+          {/* Floating / Sticky Selected Status Bar */}
+          {selectedTables.length > 0 && (
+            <div className="sticky bottom-4 z-20 bg-slate-900 text-white rounded-2xl p-4 shadow-xl border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30 flex items-center justify-center shrink-0">
+                  <RotateCcw className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-white">
+                    {selectedTables.length} {selectedTables.length === 1 ? 'table' : 'tables'} selected for reset
+                  </p>
+                  <p className="text-[11px] text-slate-400 font-mono">
+                    ~{selectedRecordsCount.toLocaleString()} records will be cleared &amp; IDs reset to 1
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                <button
+                  type="button"
+                  onClick={() => setSelectedTables([])}
+                  className="px-3 py-2 text-xs font-semibold text-slate-300 hover:text-white transition cursor-pointer"
+                >
+                  Cancel Selection
+                </button>
+                <button
+                  type="button"
+                  onClick={handleOpenResetModal}
+                  className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer shadow-md"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Review &amp; Reset ({selectedTables.length})</span>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1125,6 +1554,146 @@ GEMINI_API_KEY=
 
             <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl text-purple-900 text-[11px] mt-3">
               <span className="font-bold">GitHub Publishing:</span> Pushing to GitHub triggers this action to publish multi-arch images directly to <code className="font-mono bg-white px-1.5 py-0.5 rounded border border-purple-200">ghcr.io</code> automatically.
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation & Safety Modal Dialog */}
+      {isResetModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 space-y-5 animate-in zoom-in-95 my-8">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-rose-100 border border-rose-200 text-rose-600 flex items-center justify-center shrink-0">
+                  <ShieldAlert className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Confirm Selective Table Reset</h3>
+                  <p className="text-xs text-slate-500">
+                    Administrator authorization required for data purge
+                  </p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setIsResetModalOpen(false)}
+                disabled={resetting}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Warning Callout */}
+            <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl space-y-2 text-xs text-rose-900">
+              <div className="flex items-center gap-2 font-bold text-rose-800">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>Permanent Data Deletion Notice</span>
+              </div>
+              <p className="text-rose-700 leading-relaxed">
+                You are about to permanently wipe all records in <strong>{selectedTables.length} table(s)</strong> (~{selectedRecordsCount.toLocaleString()} total rows).
+                PostgreSQL will execute <code className="font-mono bg-rose-100 px-1 py-0.5 rounded">TRUNCATE TABLE ... RESTART IDENTITY CASCADE</code>, which safely clears related dependent records and resets auto-increment ID counters to 1.
+              </p>
+            </div>
+
+            {/* List of Selected Tables */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-slate-700">Affected Tables ({selectedTables.length}):</span>
+                <span className="text-slate-500 font-mono">~{selectedRecordsCount.toLocaleString()} records</span>
+              </div>
+
+              <div className="max-h-48 overflow-y-auto p-3 bg-slate-50 rounded-2xl border border-slate-200 divide-y divide-slate-100">
+                {selectedTables.map((tName) => {
+                  const stat = config?.tableStats.find((s) => s.tableName === tName);
+                  return (
+                    <div key={tName} className="py-1.5 first:pt-0 last:pb-0 flex items-center justify-between text-xs">
+                      <div>
+                        <span className="font-bold text-slate-800">{stat?.description || tName}</span>
+                        <code className="text-[11px] text-slate-400 font-mono ml-2">({tName})</code>
+                      </div>
+                      <span className="font-mono text-[11px] font-bold text-slate-700 bg-white px-2 py-0.5 rounded border border-slate-200">
+                        {(stat?.rowCount ?? 0).toLocaleString()} rows
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Admin safety note if users table is wiped */}
+            {selectedTables.includes('users') && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-2 text-xs text-amber-900">
+                <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>
+                  <strong>Admin Account Preserved:</strong> Your active Administrator account and session will automatically be preserved to ensure continuous login access.
+                </span>
+              </div>
+            )}
+
+            {/* Optional Reseed Checkbox */}
+            <label className="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 hover:bg-slate-50 transition cursor-pointer text-xs">
+              <input
+                type="checkbox"
+                checked={reseedDemoOnReset}
+                onChange={(e) => setReseedDemoOnReset(e.target.checked)}
+                className="mt-0.5 rounded text-blue-600 focus:ring-blue-500"
+              />
+              <div>
+                <span className="font-bold text-slate-800">Re-seed clean demo dataset after reset</span>
+                <p className="text-slate-500 text-[11px] mt-0.5">
+                  Populate standard initial sample assets, categories, models, locations, and departments for a clean restart.
+                </p>
+              </div>
+            </label>
+
+            {/* Safety Confirmation Checkbox */}
+            <label className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-rose-50/50 border border-rose-200 hover:bg-rose-50 transition cursor-pointer text-xs">
+              <input
+                type="checkbox"
+                checked={resetConfirmed}
+                onChange={(e) => setResetConfirmed(e.target.checked)}
+                className="mt-0.5 rounded text-rose-600 focus:ring-rose-500"
+              />
+              <span className="font-bold text-rose-900">
+                I understand that this action is irreversible and permanently erases all records in the {selectedTables.length} selected table(s).
+              </span>
+            </label>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsResetModalOpen(false)}
+                disabled={resetting}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 hover:bg-slate-100 text-xs font-bold transition cursor-pointer"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExecuteReset}
+                disabled={!resetConfirmed || resetting}
+                className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition cursor-pointer shadow-md ${
+                  resetConfirmed && !resetting
+                    ? 'bg-rose-600 hover:bg-rose-700 text-white'
+                    : 'bg-slate-200 text-slate-400 cursor-not-allowed border border-slate-300'
+                }`}
+              >
+                {resetting ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Executing Truncate...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    <span>Permanently Reset {selectedTables.length} Table(s)</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>

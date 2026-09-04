@@ -21,6 +21,9 @@ import {
   inventoryMovements,
   vendorRepairs,
   entryLogs,
+  pmPlans,
+  pmSchedules,
+  pmWorkOrders,
   users,
 } from './schema.ts';
 import { eq } from 'drizzle-orm';
@@ -37,6 +40,9 @@ export async function seedDatabase(force = false) {
     } else {
       console.log('Force re-seeding database with complete sample dataset...');
       // Clean up existing tables in reverse dependency order
+      await db.delete(pmWorkOrders);
+      await db.delete(pmSchedules);
+      await db.delete(pmPlans);
       await db.delete(entryLogs);
       await db.delete(vendorRepairs);
       await db.delete(inventoryMovements);
@@ -652,7 +658,374 @@ export async function seedDatabase(force = false) {
       },
     ]);
 
-    console.log('Database sample records successfully seeded!');
+    // 19. Preventive Maintenance Plans (Master Templates)
+    const [pmPlanCnc, pmPlanHydraulic, pmPlanLaser] = await db.insert(pmPlans).values([
+      {
+        code: 'PM-CNC-M01',
+        title: 'CNC Milling Center Monthly Servicing & Geometric Calibration',
+        description: 'Monthly lubrication, spindle runout calibration, pneumatic pressure audit, axis way-cover cleaning, and coolant filter replacement.',
+        category: 'Mechanical & Calibration',
+        frequencyType: 'monthly',
+        frequencyInterval: 1,
+        estimatedDurationMinutes: 75,
+        priority: 'high',
+        machineCategory: 'CNC Machining',
+        checklistTemplate: [
+          {
+            id: 'task-1',
+            order: 1,
+            task: 'Inspect central way lubrication oil reservoir level and pump pressure',
+            instruction: 'Verify level is above MIN mark and pressure gauge reads 1.4 – 1.8 MPa.',
+            type: 'numeric',
+            unit: 'MPa',
+            minValue: 1.4,
+            maxValue: 1.8,
+            isRequired: true,
+          },
+          {
+            id: 'task-2',
+            order: 2,
+            task: 'Verify Spindle Runout and Taper Cleanliness',
+            instruction: 'Clean BT40/HSK taper socket and measure spindle radial runout with dial test indicator.',
+            type: 'numeric',
+            unit: 'µm',
+            minValue: 0,
+            maxValue: 5,
+            isRequired: true,
+          },
+          {
+            id: 'task-3',
+            order: 3,
+            task: 'Inspect X/Y/Z telescopic way covers and wipers for debris or damage',
+            instruction: 'Clean wipers, remove metal chips, and check for binding or torn seals.',
+            type: 'pass_fail',
+            isRequired: true,
+          },
+          {
+            id: 'task-4',
+            order: 4,
+            task: 'Clean/Replace Coolant Filter and check refractometer concentration',
+            instruction: 'Ensure emulsion coolant Brix ratio is within 6.0% - 9.0%.',
+            type: 'numeric',
+            unit: '% Brix',
+            minValue: 6.0,
+            maxValue: 9.0,
+            isRequired: true,
+          },
+          {
+            id: 'task-5',
+            order: 5,
+            task: 'Emergency Stop & Interlock Safety Verification',
+            instruction: 'Test all door safety switches and console E-stops.',
+            type: 'pass_fail',
+            isRequired: true,
+          },
+        ],
+        requiredPartsTemplate: [
+          {
+            itemName: 'Mobil Vactra No. 2 Slideway Oil',
+            quantity: 2,
+            uom: 'liter',
+          },
+          {
+            itemName: 'Coolant Sump Mesh Filter Cartridge',
+            quantity: 1,
+            uom: 'unit',
+          },
+        ],
+        safetyNotes: 'LOCKOUT / TAGOUT (LOTO) required before inspecting way covers or opening electrical cabinets. Wear safety goggles.',
+        isActive: true,
+        createdById: uAdmin.id,
+      },
+      {
+        code: 'PM-HYD-Q01',
+        title: 'Hydraulic Press 50T Quarterly Pressure & Seal Audit',
+        description: 'Comprehensive quarterly check of hydraulic pump output, cylinder seal leakage, proportional valve response, and hydraulic fluid filtration.',
+        category: 'Hydraulic & Pressure',
+        frequencyType: 'quarterly',
+        frequencyInterval: 1,
+        estimatedDurationMinutes: 90,
+        priority: 'critical',
+        machineCategory: 'Press & Forming',
+        checklistTemplate: [
+          {
+            id: 'task-h1',
+            order: 1,
+            task: 'Measure Main Ram Clamping Pressure at 100% Demand',
+            instruction: 'Verify gauge pressure reaches 210 – 230 bar.',
+            type: 'numeric',
+            unit: 'bar',
+            minValue: 210,
+            maxValue: 230,
+            isRequired: true,
+          },
+          {
+            id: 'task-h2',
+            order: 2,
+            task: 'Check Hydraulic Oil Operating Temperature',
+            instruction: 'Measure tank temperature after 15 min warm-up (Optimal: 40°C – 55°C).',
+            type: 'numeric',
+            unit: '°C',
+            minValue: 35,
+            maxValue: 60,
+            isRequired: true,
+          },
+          {
+            id: 'task-h3',
+            order: 3,
+            task: 'Inspect Piston Rod Chrome & Wiper Seal Condition',
+            instruction: 'Look for scoring, oil film weeping, or hydraulic hose degradation.',
+            type: 'pass_fail',
+            isRequired: true,
+          },
+          {
+            id: 'task-h4',
+            order: 4,
+            task: 'Dual Optoelectronic Safety Light Curtain Alignment & Response',
+            instruction: 'Ensure press immediately arrests stroke within 80ms when beam is broken.',
+            type: 'pass_fail',
+            isRequired: true,
+          },
+        ],
+        requiredPartsTemplate: [
+          {
+            itemName: 'Hydraulic Return Line Filter 10-Micron',
+            quantity: 1,
+            uom: 'unit',
+          },
+        ],
+        safetyNotes: 'Depressurize hydraulic accumulator system before disconnecting any test ports. Secure mechanical safety lock block under ram.',
+        isActive: true,
+        createdById: uSuper.id,
+      },
+      {
+        code: 'PM-LSR-W01',
+        title: 'Laser Cutting Chiller & Optical Beam Path Weekly Inspection',
+        description: 'Weekly cleaning of laser protective glass window, chiller deionized water conductivity check, and assist gas pressure regulator inspection.',
+        category: 'Optics & Thermal',
+        frequencyType: 'weekly',
+        frequencyInterval: 1,
+        estimatedDurationMinutes: 45,
+        priority: 'high',
+        machineCategory: 'Laser & Fabrication',
+        checklistTemplate: [
+          {
+            id: 'task-l1',
+            order: 1,
+            task: 'Inspect and clean optical protection window (cover slide)',
+            instruction: 'Inspect with high-intensity light. Replace if any spatter or micro-cracks exist.',
+            type: 'pass_fail',
+            isRequired: true,
+          },
+          {
+            id: 'task-l2',
+            order: 2,
+            task: 'Measure Chiller Coolant Electrical Conductivity',
+            instruction: 'Conductivity must remain below 10.0 µS/cm.',
+            type: 'numeric',
+            unit: 'µS/cm',
+            minValue: 0,
+            maxValue: 10.0,
+            isRequired: true,
+          },
+          {
+            id: 'task-l3',
+            order: 3,
+            task: 'Verify Nitrogen Assist Gas High-Pressure Delivery',
+            instruction: 'Verify regulator delivers 18 – 25 bar without flutter.',
+            type: 'numeric',
+            unit: 'bar',
+            minValue: 18,
+            maxValue: 25,
+            isRequired: true,
+          },
+          {
+            id: 'task-l4',
+            order: 4,
+            task: 'Check Exhaust Fume Extraction Filter Differential Pressure',
+            instruction: 'Ensure airflow sensor is green and delta-P < 1500 Pa.',
+            type: 'pass_fail',
+            isRequired: true,
+          },
+        ],
+        requiredPartsTemplate: [
+          {
+            itemName: 'Laser Lens Optical Cleaning Wipes (Pack of 50)',
+            quantity: 1,
+            uom: 'package',
+          },
+        ],
+        safetyNotes: 'Class 4 Laser installation. Wear certified optical density (OD 6+) safety eyewear. Ensure beam enclosure interlocks are engaged.',
+        isActive: true,
+        createdById: uAdmin.id,
+      },
+    ]).returning();
+
+    // 20. Preventive Maintenance Recurring Schedules (Linked to Machines)
+    const todayStr = new Date().toISOString().split('T')[0];
+    const dueToday = todayStr;
+    const dueIn3Days = new Date(Date.now() + 86400000 * 3).toISOString().split('T')[0];
+    const overdueDate = new Date(Date.now() - 86400000 * 2).toISOString().split('T')[0];
+
+    const [sched1, sched2, sched3] = await db.insert(pmSchedules).values([
+      {
+        planId: pmPlanCnc.id,
+        machineId: m1.id, // DMG Mori CMX 50V (Central Production Branch)
+        branchId: b1.id,
+        departmentId: d1.id,
+        assignedEmployeeId: emp1.id, // David Miller
+        scheduleType: 'fixed_calendar',
+        frequencyType: 'monthly',
+        frequencyInterval: 1,
+        startDate: '2026-01-01',
+        nextDueDate: dueToday,
+        lastCompletedDate: '2026-08-03',
+        status: 'active',
+        autoGenerateDaysInAdvance: 7,
+        notes: 'Monthly servicing priority. Perform during first shift maintenance window.',
+      },
+      {
+        planId: pmPlanHydraulic.id,
+        machineId: m2.id, // Amada HFE 100T (Central Production Branch)
+        branchId: b1.id,
+        departmentId: d1.id,
+        assignedEmployeeId: emp1.id,
+        scheduleType: 'fixed_calendar',
+        frequencyType: 'quarterly',
+        frequencyInterval: 1,
+        startDate: '2026-01-01',
+        nextDueDate: overdueDate,
+        lastCompletedDate: '2026-06-01',
+        status: 'active',
+        autoGenerateDaysInAdvance: 14,
+        notes: 'Crucial hydraulic inspection. Safety light curtain verification mandatory.',
+      },
+      {
+        planId: pmPlanLaser.id,
+        machineId: m3.id, // Trumpf TruLaser 3030 (West Logistics Branch)
+        branchId: b2.id,
+        departmentId: d3.id,
+        assignedEmployeeId: emp2.id, // Sarah Jenkins
+        scheduleType: 'rolling_after_completion',
+        frequencyType: 'weekly',
+        frequencyInterval: 1,
+        startDate: '2026-08-01',
+        nextDueDate: dueIn3Days,
+        lastCompletedDate: '2026-08-27',
+        status: 'active',
+        autoGenerateDaysInAdvance: 3,
+        notes: 'Optics and water conductivity audit before weekly high-power sheet runs.',
+      },
+    ]).returning();
+
+    // 21. Preventive Maintenance Work Orders / Executions
+    await db.insert(pmWorkOrders).values([
+      {
+        workOrderNumber: 'WO-PM-2026-0001',
+        scheduleId: sched1.id,
+        planId: pmPlanCnc.id,
+        machineId: m1.id,
+        branchId: b1.id,
+        departmentId: d1.id,
+        title: 'CNC-501 Monthly Servicing & Calibration',
+        dueDate: dueToday,
+        priority: 'high',
+        status: 'scheduled',
+        assignedEmployeeId: emp1.id,
+        assignedUserId: uMgr1.id,
+        checklistResults: [
+          {
+            taskId: 'task-1',
+            task: 'Inspect central way lubrication oil reservoir level and pump pressure',
+            type: 'numeric',
+            status: 'pass',
+            valueNum: 1.6,
+            notes: 'Reservoir topped up to nominal mark.',
+          },
+          {
+            taskId: 'task-2',
+            task: 'Verify Spindle Runout and Taper Cleanliness',
+            type: 'numeric',
+            status: 'pass',
+            valueNum: 2.1,
+            notes: 'Dial gauge tested. Runout within tolerance.',
+          },
+          {
+            taskId: 'task-3',
+            task: 'Inspect X/Y/Z telescopic way covers and wipers for debris or damage',
+            type: 'pass_fail',
+            status: 'pass',
+            notes: 'Debris cleared, wipers intact.',
+          },
+          {
+            taskId: 'task-4',
+            task: 'Clean/Replace Coolant Filter and check refractometer concentration',
+            type: 'numeric',
+            status: 'pass',
+            valueNum: 7.5,
+            notes: 'Brix concentration optimal at 7.5%.',
+          },
+          {
+            taskId: 'task-5',
+            task: 'Emergency Stop & Interlock Safety Verification',
+            type: 'pass_fail',
+            status: 'pass',
+            notes: 'All 3 E-stop switches verified operational.',
+          },
+        ],
+        partsConsumed: [
+          {
+            itemName: 'Mobil Vactra No. 2 Slideway Oil',
+            quantity: 2,
+            uom: 'liter',
+            deductedFromStock: true,
+          },
+        ],
+        overallCondition: 'good',
+        summaryNotes: 'Ready for full production shift.',
+        timeSpentMinutes: 65,
+      },
+      {
+        workOrderNumber: 'WO-PM-2026-0002',
+        scheduleId: sched2.id,
+        planId: pmPlanHydraulic.id,
+        machineId: m2.id,
+        branchId: b1.id,
+        departmentId: d1.id,
+        title: 'HYD-01 50T Quarterly Pressure & Seal Audit',
+        dueDate: overdueDate,
+        priority: 'critical',
+        status: 'scheduled',
+        assignedEmployeeId: emp1.id,
+        assignedUserId: uMgr1.id,
+        checklistResults: [],
+        partsConsumed: [],
+        overallCondition: 'fair',
+        summaryNotes: 'Scheduled maintenance overdue. Awaiting technician sign-off.',
+        timeSpentMinutes: 0,
+      },
+      {
+        workOrderNumber: 'WO-PM-2026-0003',
+        scheduleId: sched3.id,
+        planId: pmPlanLaser.id,
+        machineId: m3.id,
+        branchId: b2.id,
+        departmentId: d3.id,
+        title: 'LSR-3030 Weekly Chiller & Optical Beam Inspection',
+        dueDate: dueIn3Days,
+        priority: 'high',
+        status: 'scheduled',
+        assignedEmployeeId: emp2.id,
+        assignedUserId: uMgr1.id,
+        checklistResults: [],
+        partsConsumed: [],
+        overallCondition: 'good',
+        summaryNotes: 'Upcoming scheduled check.',
+        timeSpentMinutes: 0,
+      },
+    ]);
+
+    console.log('Database sample records successfully seeded with Preventive Maintenance dataset!');
   } catch (error) {
     console.error('Error during database seed:', error);
   }

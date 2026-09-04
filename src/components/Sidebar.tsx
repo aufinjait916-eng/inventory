@@ -13,6 +13,7 @@ import {
   Sliders,
   Database,
   LogOut,
+  CalendarClock,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.tsx';
 import { UserRole } from '../types.ts';
@@ -24,6 +25,7 @@ export type NavTab =
   | 'categories_fields'
   | 'transfers'
   | 'requests'
+  | 'preventive_maintenance'
   | 'department_portal'
   | 'repairs_vendors'
   | 'organization'
@@ -58,6 +60,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
       icon: Boxes,
       badge: dashboardStats?.lowStockCount ? dashboardStats.lowStockCount : undefined,
       roles: ['admin', 'super_manager', 'manager', 'department'],
+    },
+    {
+      id: 'preventive_maintenance',
+      label: 'Preventive Maintenance',
+      icon: CalendarClock,
+      badge: dashboardStats?.pmDueCount ? dashboardStats.pmDueCount : undefined,
+      roles: ['admin', 'super_manager', 'manager'],
     },
     {
       id: 'create_item',

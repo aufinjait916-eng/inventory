@@ -14,6 +14,7 @@ import { CategoriesAndFieldsView } from './components/CategoriesAndFieldsView.ts
 import { OrganizationView } from './components/OrganizationView.tsx';
 import { AuditLogsView } from './components/AuditLogsView.tsx';
 import { PostgresConfigView } from './components/PostgresConfigView.tsx';
+import { PreventiveMaintenanceView } from './components/PreventiveMaintenanceView.tsx';
 import { InventoryItem } from './types.ts';
 import { CheckCircle2, AlertCircle, Info } from 'lucide-react';
 
@@ -88,6 +89,7 @@ const MainLayout: React.FC = () => {
         <main className="flex-1 overflow-y-auto p-6 md:p-8">
           <div className="max-w-7xl mx-auto">
             {activeTab === 'dashboard' && <DashboardView setActiveTab={setActiveTab} />}
+            {activeTab === 'preventive_maintenance' && <PreventiveMaintenanceView />}
             {activeTab === 'inventory' && (
               <InventoryView
                 onOpenTransfer={handleOpenTransfer}
