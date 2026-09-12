@@ -8,6 +8,9 @@ import {
   Wrench,
   CheckCircle2,
   Bell,
+  Building2,
+  ChevronDown,
+  Layers,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.tsx';
 import { UserRole } from '../types.ts';
@@ -75,40 +78,73 @@ export const Header: React.FC = () => {
   const branchDepartments = departments.filter((d) => d.branchId === currentBranchId);
 
   return (
-    <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 md:px-8 sticky top-0 z-30 shadow-xs">
-      {/* Left: Breadcrumbs & Branch Selector */}
-      <div className="flex items-center gap-2">
-        <div className="flex items-center text-sm">
-          <span className="text-slate-400 mr-2 font-medium">Branches /</span>
-          {currentRole === 'admin' || currentRole === 'super_manager' ? (
-            <select
-              id="header-branch-select"
-              value={currentBranchId}
-              onChange={(e) => setCurrentBranchId(parseInt(e.target.value))}
-              className="bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 font-semibold text-slate-800 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-xs"
-            >
-              {branches.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.name} ({b.code})
-                </option>
-              ))}
-            </select>
-          ) : (
-            <span className="font-semibold text-slate-900 text-sm">
-              {currentBranch ? `${currentBranch.name} (${currentBranch.code})` : 'Central Plant (HQ)'}
-            </span>
-          )}
+    <header className="h-14 bg-white border-b border-slate-200/70 flex items-center justify-between px-4 sm:px-6 sticky top-0 z-30">
+      {/* Left: Branch Selector & Active Badge */}
+      <div className="flex items-center gap-3">
+        {/* Branch Card */}
+        <div
+          title="Active operating branch. All inventory levels, tool allocations, and operations reflect this location."
+          className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-slate-50/70 border border-slate-200/70 hover:border-amber-300 transition"
+        >
+          {/* Branch Icon with soft Amber tint */}
+          <div className="w-7 h-7 rounded-lg bg-amber-50 text-amber-700 border border-amber-200/60 flex items-center justify-center shrink-0">
+            <Building2 className="w-3.5 h-3.5" />
+          </div>
+
+          <div className="flex flex-col text-left min-w-0">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-600 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600"></span>
+                Active Branch:
+              </span>
+              {currentBranch && (
+                <span className="bg-amber-100 text-amber-900 border border-amber-300 text-[10px] font-mono font-semibold px-1.5 py-0.2 rounded">
+                  {currentBranch.code}
+                </span>
+              )}
+            </div>
+
+            {currentRole === 'admin' || currentRole === 'super_manager' ? (
+              <div className="relative flex items-center mt-0.5">
+                <select
+                  id="header-branch-select"
+                  value={currentBranchId}
+                  onChange={(e) => setCurrentBranchId(parseInt(e.target.value))}
+                  title="Switch active operating branch location"
+                  tabIndex={1}
+                  className="appearance-none font-semibold text-slate-900 text-xs sm:text-sm pr-6 bg-transparent focus:outline-hidden cursor-pointer tracking-normal"
+                >
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name} ({b.code}) - {b.city || 'Main Site'}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-600 absolute right-0 pointer-events-none" />
+              </div>
+            ) : (
+              <span className="font-semibold text-slate-900 text-xs sm:text-sm truncate max-w-[180px]">
+                {currentBranch ? currentBranch.name : 'Central Plant (HQ)'}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Department Selector for Department terminal */}
         {currentRole === 'department' && (
-          <div className="flex items-center gap-1.5 ml-3 bg-emerald-50 px-2.5 py-1 rounded border border-emerald-200 text-xs">
-            <span className="text-emerald-700 font-semibold">Dept:</span>
+          <div
+            title="Operating department within this branch"
+            className="flex items-center gap-1.5 ml-1 bg-emerald-50 px-2.5 py-1.5 rounded-xl border border-emerald-300 text-xs"
+          >
+            <Layers className="w-3.5 h-3.5 text-emerald-700" />
+            <span className="text-emerald-900 font-semibold">Dept:</span>
             <select
               id="header-department-select"
               value={currentDepartmentId}
               onChange={(e) => setCurrentDepartmentId(parseInt(e.target.value))}
-              className="bg-transparent font-bold text-emerald-900 focus:outline-none cursor-pointer text-xs"
+              title="Select your operating department"
+              tabIndex={2}
+              className="bg-transparent font-semibold text-emerald-950 focus:outline-hidden cursor-pointer text-xs"
             >
               {branchDepartments.map((d) => (
                 <option key={d.id} value={d.id}>
@@ -120,58 +156,69 @@ export const Header: React.FC = () => {
         )}
       </div>
 
-      {/* Right: Low Stock Alert & PM Notifications & User Profile */}
-      <div className="flex items-center gap-3">
+      {/* Right: Low Stock Alert & PM Notifications & User Profile & Small Logout Button */}
+      <div className="flex items-center gap-2 sm:gap-3">
         {/* PM Notification Pill */}
         {pmBadges && pmBadges.overdue > 0 ? (
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded bg-rose-50 border border-rose-200 text-rose-800 text-xs font-semibold animate-pulse">
+          <div
+            title={`${pmBadges.overdue} scheduled maintenance services are currently overdue!`}
+            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-50 text-rose-800 border border-rose-300 text-xs font-semibold cursor-default"
+          >
             <CalendarClock className="w-3.5 h-3.5 text-rose-600 shrink-0" />
             <span>{pmBadges.overdue} PM Overdue</span>
           </div>
         ) : pmBadges && pmBadges.dueToday > 0 ? (
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded bg-blue-50 border border-blue-200 text-blue-800 text-xs font-semibold">
-            <CalendarClock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
-            <span>{pmBadges.dueToday} PM Due Today</span>
+          <div
+            title={`${pmBadges.dueToday} preventative maintenance service tasks due today`}
+            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 text-amber-900 border border-amber-300 text-xs font-semibold cursor-default"
+          >
+            <CalendarClock className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+            <span>{pmBadges.dueToday} PM Today</span>
           </div>
         ) : null}
 
         {/* Low Stock Alert Pill */}
         {dashboardStats?.lowStockCount ? (
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
-            <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+          <div
+            title={`${dashboardStats.lowStockCount} items are below designated minimum threshold`}
+            className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-orange-50 text-orange-900 border border-orange-300 text-xs font-semibold cursor-default"
+          >
+            <AlertTriangle className="w-3.5 h-3.5 text-orange-600 shrink-0" />
             <span>{dashboardStats.lowStockCount} Low Stock</span>
           </div>
         ) : null}
 
-        {/* User Profile Info & Logout */}
-        <div className="flex items-center gap-3 pl-3 border-l border-slate-200">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full bg-slate-900 text-white flex items-center justify-center text-xs font-bold shadow-xs">
+        {/* User Profile Info & Compact Logout */}
+        <div className="flex items-center gap-2.5 pl-2.5 sm:pl-3 border-l border-slate-300/80">
+          <div
+            title={`Current Operator: ${currentUserName} (${roleLabels[currentRole]?.title || currentRole})`}
+            className="flex items-center gap-2"
+          >
+            <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-900 border border-amber-300 flex items-center justify-center text-xs font-bold shrink-0">
               {currentUserName ? currentUserName[0].toUpperCase() : 'U'}
             </div>
-            <div className="hidden md:block text-left">
-              <p className="text-xs font-bold text-slate-800 leading-tight truncate max-w-[160px]">
+            <div className="hidden lg:block text-left">
+              <p className="text-xs font-semibold text-slate-800 leading-tight truncate max-w-[140px]">
                 {currentUserName}
               </p>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className={`inline-block px-1.5 py-0.2 rounded text-[10px] font-bold border ${roleLabels[currentRole]?.badgeColor || 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+              <div className="flex items-center gap-1 mt-0.5">
+                <span className={`inline-block px-1.5 py-0.2 rounded text-[9px] font-semibold border ${roleLabels[currentRole]?.badgeColor || 'bg-slate-100 text-slate-800 border-slate-300'}`}>
                   {roleLabels[currentRole]?.title || currentRole}
                 </span>
-                {(currentRole === 'admin' || currentRole === 'super_manager') && (
-                  <span className="text-[10px] text-slate-400 font-medium">· Global</span>
-                )}
               </div>
             </div>
           </div>
 
+          {/* Small Logout Button - Icon Only */}
           <button
             id="btn-header-logout"
             onClick={logout}
-            title="Log out of session"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition cursor-pointer shadow-xs ml-1"
+            title="Sign out of AU Assetflow"
+            aria-label="Sign out"
+            tabIndex={100}
+            className="w-7 h-7 flex items-center justify-center text-slate-600 hover:text-rose-600 hover:bg-rose-50 border border-slate-300/80 hover:border-rose-200 rounded-lg transition cursor-pointer shrink-0"
           >
-            <LogOut className="w-3.5 h-3.5 text-rose-600" />
-            <span>Logout</span>
+            <LogOut className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>

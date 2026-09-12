@@ -255,14 +255,16 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
             <div className="grid grid-cols-2 gap-3">
               <button
                 type="button"
+                tabIndex={1}
+                title="Select Capital Asset tracking for equipment and machinery"
                 onClick={() => setItemType('asset')}
-                className={`p-3 rounded-xl border flex items-center gap-3 text-left transition ${
+                className={`p-3 rounded-xl border flex items-center gap-3 text-left transition cursor-pointer ${
                   itemType === 'asset'
-                    ? 'border-blue-600 bg-blue-50/60 ring-2 ring-blue-500/20 text-blue-900'
+                    ? 'border-[#FF8C00] bg-amber-50/70 ring-2 ring-[#FF8C00]/20 text-amber-950 font-bold'
                     : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
                 }`}
               >
-                <Boxes className={`w-4 h-4 ${itemType === 'asset' ? 'text-blue-600' : 'text-slate-400'}`} />
+                <Boxes className={`w-4 h-4 ${itemType === 'asset' ? 'text-[#FF8C00]' : 'text-slate-400'}`} />
                 <div>
                   <div className="font-bold">Capital Asset</div>
                   <div className="text-[10px] text-slate-500">Tracked equipment, tools, machinery</div>
@@ -271,14 +273,16 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
 
               <button
                 type="button"
+                tabIndex={2}
+                title="Select Consumable Stock tracking for batch items and oils"
                 onClick={() => setItemType('consumable')}
-                className={`p-3 rounded-xl border flex items-center gap-3 text-left transition ${
+                className={`p-3 rounded-xl border flex items-center gap-3 text-left transition cursor-pointer ${
                   itemType === 'consumable'
-                    ? 'border-emerald-600 bg-emerald-50/60 ring-2 ring-emerald-500/20 text-emerald-900'
+                    ? 'border-[#FF8C00] bg-amber-50/70 ring-2 ring-[#FF8C00]/20 text-amber-950 font-bold'
                     : 'border-slate-200 bg-white hover:bg-slate-50 text-slate-700'
                 }`}
               >
-                <Package className={`w-4 h-4 ${itemType === 'consumable' ? 'text-emerald-600' : 'text-slate-400'}`} />
+                <Package className={`w-4 h-4 ${itemType === 'consumable' ? 'text-[#FF8C00]' : 'text-slate-400'}`} />
                 <div>
                   <div className="font-bold">Consumable Stock</div>
                   <div className="text-[10px] text-slate-500">Expended items, lubricants, raw stock</div>
@@ -296,10 +300,12 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
               <input
                 type="text"
                 required
+                tabIndex={3}
+                title="Equipment or item name"
                 placeholder="e.g. End Mill Carbide 10mm or Spindle Motor"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
               />
             </div>
 
@@ -310,10 +316,12 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
               <input
                 type="text"
                 required
+                tabIndex={4}
+                title="Unique tracking barcode or SKU code"
                 placeholder="e.g. AST-CNC-5021"
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
-                className="w-full px-3 py-2 font-mono uppercase border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                className="w-full px-3 py-2 font-mono uppercase border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
               />
             </div>
           </div>
@@ -327,11 +335,13 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
               <select
                 value={categoryId}
                 required
+                tabIndex={5}
+                title="Select equipment category"
                 onChange={(e) => {
                   setCategoryId(Number(e.target.value));
                   setModelId('');
                 }}
-                className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
               >
                 {categories.map((cat) => (
                   <option key={cat.id} value={cat.id}>
@@ -345,8 +355,10 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
               <label className="block font-bold text-slate-700 mb-1">Equipment / Item Model</label>
               <select
                 value={modelId}
+                tabIndex={6}
+                title="Linked catalog model template"
                 onChange={(e) => setModelId(e.target.value ? Number(e.target.value) : '')}
-                className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
               >
                 <option value="">-- Generic / No Specific Model --</option>
                 {filteredModels.map((m) => (
@@ -458,9 +470,11 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
             <div>
               <label className="block font-bold text-slate-700 mb-1">Supplier / Vendor</label>
               <select
+                tabIndex={7}
+                title="Select source supplier or vendor"
                 value={supplierId}
                 onChange={(e) => setSupplierId(e.target.value ? Number(e.target.value) : '')}
-                className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
               >
                 <option value="">-- Direct Stock / Internal --</option>
                 {vendors.map((v) => (
@@ -474,9 +488,11 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
             <div>
               <label className="block font-bold text-slate-700 mb-1">Status</label>
               <select
+                tabIndex={8}
+                title="Current operating or stock status"
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white font-semibold"
+                className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white font-semibold"
               >
                 <option value="in_stock">In Stock / Available</option>
                 <option value="in_use">In Use / Active</option>
@@ -491,9 +507,11 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
             <div>
               <label className="block font-bold text-slate-700 mb-1">Unit of Measure (UOM)</label>
               <select
+                tabIndex={9}
+                title="Unit of Measurement"
                 value={uom}
                 onChange={(e) => setUom(e.target.value as UOMType)}
-                className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-semibold"
+                className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-semibold focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00]"
               >
                 {UOM_OPTIONS.map((u) => (
                   <option key={u.value} value={u.value}>
@@ -505,13 +523,14 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
 
             <div>
               <label className="block font-bold text-slate-700 mb-1">
-                Total Quantity {itemType === 'asset' && <span className="text-[10px] text-blue-600 font-normal">(Asset = 1)</span>}
+                Total Quantity {itemType === 'asset' && <span className="text-[10px] text-[#FF8C00] font-normal">(Asset = 1)</span>}
               </label>
               {itemType === 'asset' ? (
                 <input
                   type="number"
                   readOnly
                   value="1"
+                  title="Locked to 1 for capital equipment tracking"
                   className="w-full px-2.5 py-1.5 font-mono border border-slate-300 rounded-lg bg-slate-100 text-slate-700 cursor-not-allowed"
                 />
               ) : (
@@ -520,22 +539,25 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
                   min="0"
                   step="any"
                   required
+                  tabIndex={10}
+                  title="Total units in stock inventory"
                   value={totalQuantity}
                   onChange={(e) => setTotalQuantity(e.target.value)}
-                  className="w-full px-2.5 py-1.5 font-mono border border-slate-300 rounded-lg bg-white"
+                  className="w-full px-2.5 py-1.5 font-mono border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00]"
                 />
               )}
             </div>
 
             <div>
               <label className="block font-bold text-slate-700 mb-1">
-                Available Quantity {itemType === 'asset' && <span className="text-[10px] text-blue-600 font-normal">(Asset = 1)</span>}
+                Available Quantity {itemType === 'asset' && <span className="text-[10px] text-[#FF8C00] font-normal">(Asset = 1)</span>}
               </label>
               {itemType === 'asset' ? (
                 <input
                   type="number"
                   readOnly
                   value="1"
+                  title="Locked to 1 for capital equipment tracking"
                   className="w-full px-2.5 py-1.5 font-mono border border-slate-300 rounded-lg bg-slate-100 text-slate-700 cursor-not-allowed"
                 />
               ) : (
@@ -544,9 +566,11 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
                   min="0"
                   step="any"
                   required
+                  tabIndex={11}
+                  title="Quantity immediately unallocated and available for use"
                   value={availableQuantity}
                   onChange={(e) => setAvailableQuantity(e.target.value)}
-                  className="w-full px-2.5 py-1.5 font-mono border border-slate-300 rounded-lg bg-white"
+                  className="w-full px-2.5 py-1.5 font-mono border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00]"
                 />
               )}
             </div>
@@ -556,19 +580,21 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
             <label className="block font-bold text-slate-700 mb-1">Internal Notes</label>
             <input
               type="text"
+              tabIndex={12}
+              title="Serial number, batch number, or condition comments"
               placeholder="Serial number, batch number, or condition..."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white"
+              className="w-full px-3 py-2 border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00]"
             />
           </div>
 
           {/* Dynamic Custom Fields Rendering */}
           {activeFieldSet && activeFieldSet.fields && activeFieldSet.fields.length > 0 && (
-            <div className="p-4 bg-indigo-50/50 rounded-xl border border-indigo-100 space-y-3">
+            <div className="p-4 bg-amber-50/50 rounded-xl border border-amber-200/70 space-y-3">
               <div className="flex items-center gap-2">
-                <Layers className="w-4 h-4 text-indigo-600" />
-                <h4 className="font-bold text-indigo-950">
+                <Layers className="w-4 h-4 text-[#FF8C00]" />
+                <h4 className="font-bold text-amber-950">
                   Model Specifications ({activeFieldSet.name})
                 </h4>
               </div>
@@ -584,9 +610,10 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
                       <input
                         type="text"
                         required={fld.isRequired}
+                        title={`Specification field: ${fld.label}`}
                         value={customFieldsData[fld.name] || ''}
                         onChange={(e) => handleCustomFieldChange(fld.name, e.target.value)}
-                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-[#FF8C00]"
                       />
                     )}
 
@@ -595,18 +622,20 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
                         type="number"
                         step="any"
                         required={fld.isRequired}
+                        title={`Specification field: ${fld.label}`}
                         value={customFieldsData[fld.name] || ''}
                         onChange={(e) => handleCustomFieldChange(fld.name, e.target.value)}
-                        className="w-full px-3 py-1.5 font-mono border border-slate-300 rounded-lg bg-white"
+                        className="w-full px-3 py-1.5 font-mono border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-[#FF8C00]"
                       />
                     )}
 
                     {fld.fieldType === 'dropdown' && (
                       <select
                         required={fld.isRequired}
+                        title={`Select ${fld.label}`}
                         value={customFieldsData[fld.name] || ''}
                         onChange={(e) => handleCustomFieldChange(fld.name, e.target.value)}
-                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-[#FF8C00]"
                       >
                         <option value="">-- Select {fld.label} --</option>
                         {fld.options?.map((opt, i) => (
@@ -621,9 +650,10 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
                       <input
                         type="date"
                         required={fld.isRequired}
+                        title={`Date specification: ${fld.label}`}
                         value={customFieldsData[fld.name] || ''}
                         onChange={(e) => handleCustomFieldChange(fld.name, e.target.value)}
-                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white"
+                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-[#FF8C00]"
                       />
                     )}
 
@@ -633,7 +663,7 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
                           type="checkbox"
                           checked={Boolean(customFieldsData[fld.name])}
                           onChange={(e) => handleCustomFieldChange(fld.name, e.target.checked)}
-                          className="w-4 h-4 text-indigo-600 rounded"
+                          className="w-4 h-4 text-[#FF8C00] rounded"
                         />
                         <span className="font-semibold text-slate-700">Verified / Checked</span>
                       </label>
@@ -648,6 +678,8 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
           <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
             <button
               type="button"
+              tabIndex={13}
+              title="Close modal without saving changes"
               onClick={onClose}
               className="px-4 py-2 font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
             >
@@ -655,8 +687,10 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
             </button>
             <button
               type="submit"
+              tabIndex={14}
               disabled={submitting}
-              className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-md disabled:opacity-50 cursor-pointer"
+              title="Save changes to stock registry"
+              className="px-5 py-2 bg-gradient-to-r from-[#FF8C00] to-[#FF4500] hover:from-[#FF8C00] hover:to-[#e03e00] text-white font-bold rounded-xl shadow-md disabled:opacity-50 cursor-pointer"
             >
               {submitting ? 'Saving...' : 'Update Record'}
             </button>

@@ -1,0 +1,1722 @@
+{
+  "metadata": {
+    "id": "backup_1788608636228",
+    "version": "1.0",
+    "createdAt": "2026-09-05T11:43:56.228Z",
+    "exportedBy": {
+      "id": 1,
+      "name": "ADMIN User",
+      "email": "admin@company.local",
+      "role": "admin"
+    },
+    "databaseName": "cloud_sql_development_database",
+    "totalTables": 25,
+    "totalRecords": 147,
+    "tableCounts": {
+      "branches": 4,
+      "departments": 6,
+      "locations": 6,
+      "machines": 6,
+      "employees": 6,
+      "employee_departments": 7,
+      "categories": 7,
+      "user_category_permissions": 17,
+      "custom_fields": 8,
+      "field_sets": 3,
+      "field_set_items": 7,
+      "models": 7,
+      "vendors": 4,
+      "vendor_branch_assignments": 4,
+      "request_reasons": 6,
+      "inventory_items": 11,
+      "stock_locations": 13,
+      "employee_requests": 3,
+      "inventory_movements": 4,
+      "vendor_repairs": 2,
+      "entry_logs": 10,
+      "pm_plans": 0,
+      "pm_schedules": 0,
+      "pm_work_orders": 0,
+      "users": 6
+    },
+    "description": "Manual local database backup"
+  },
+  "tables": {
+    "branches": [
+      {
+        "id": 12,
+        "name": "Central Plant & HQ",
+        "code": "BR-HQ01",
+        "location": "Building A, Metro Industrial Zone 4",
+        "phone": "+1 555-0100",
+        "createdAt": "2026-09-01T12:42:03.261Z"
+      },
+      {
+        "id": 13,
+        "name": "West Logistics Hub",
+        "code": "BR-WEST02",
+        "location": "West Port Logistics Center, Bay 12",
+        "phone": "+1 555-0200",
+        "createdAt": "2026-09-01T12:42:03.261Z"
+      },
+      {
+        "id": 14,
+        "name": "North Assembly Unit",
+        "code": "BR-NORTH03",
+        "location": "Northern Industrial Estate, Sector 7",
+        "phone": "+1 555-0300",
+        "createdAt": "2026-09-01T12:42:03.261Z"
+      },
+      {
+        "id": 15,
+        "name": "East Processing Terminal",
+        "code": "BR-EAST04",
+        "location": "Eastern Freight & Tech Hub, Bldg 3",
+        "phone": "+1 555-0400",
+        "createdAt": "2026-09-01T12:42:03.261Z"
+      }
+    ],
+    "departments": [
+      {
+        "id": 18,
+        "branchId": 12,
+        "name": "Precision Assembly & Production",
+        "code": "DEP-PROD",
+        "floorLocation": "Floor 1, Shopfloor A",
+        "createdAt": "2026-09-01T12:42:03.282Z"
+      },
+      {
+        "id": 19,
+        "branchId": 12,
+        "name": "Mechanical & Electrical Maintenance",
+        "code": "DEP-MAINT",
+        "floorLocation": "Floor 1, Workshop East",
+        "createdAt": "2026-09-01T12:42:03.282Z"
+      },
+      {
+        "id": 20,
+        "branchId": 12,
+        "name": "Quality Assurance & Testing Lab",
+        "code": "DEP-QA",
+        "floorLocation": "Floor 2, Cleanroom Lab",
+        "createdAt": "2026-09-01T12:42:03.282Z"
+      },
+      {
+        "id": 21,
+        "branchId": 13,
+        "name": "Warehouse & Shipping Logistics",
+        "code": "DEP-SHIP",
+        "floorLocation": "Dock Bays 1-8",
+        "createdAt": "2026-09-01T12:42:03.282Z"
+      },
+      {
+        "id": 22,
+        "branchId": 14,
+        "name": "Fabrication & Tooling Workshop",
+        "code": "DEP-FAB",
+        "floorLocation": "Ground Floor Tooling Bay",
+        "createdAt": "2026-09-01T12:42:03.282Z"
+      },
+      {
+        "id": 23,
+        "branchId": 12,
+        "name": "Chemical Processing & Fluids Bay",
+        "code": "DEP-CHEM",
+        "floorLocation": "Hazardous Materials Containment Bay",
+        "createdAt": "2026-09-01T12:42:03.282Z"
+      }
+    ],
+    "locations": [
+      {
+        "id": 18,
+        "branchId": 12,
+        "departmentId": 18,
+        "name": "Shop Floor Bay A1",
+        "type": "room",
+        "parentLocationId": null,
+        "createdAt": "2026-09-01T12:42:03.302Z"
+      },
+      {
+        "id": 19,
+        "branchId": 12,
+        "departmentId": 19,
+        "name": "Tool Crib & Spare Parts Rack",
+        "type": "storage",
+        "parentLocationId": null,
+        "createdAt": "2026-09-01T12:42:03.302Z"
+      },
+      {
+        "id": 20,
+        "branchId": 12,
+        "departmentId": 20,
+        "name": "Calibration Bench 2",
+        "type": "shelf",
+        "parentLocationId": null,
+        "createdAt": "2026-09-01T12:42:03.302Z"
+      },
+      {
+        "id": 21,
+        "branchId": 13,
+        "departmentId": 21,
+        "name": "Aisle 04 Bulk Pallet Rack",
+        "type": "rack",
+        "parentLocationId": null,
+        "createdAt": "2026-09-01T12:42:03.302Z"
+      },
+      {
+        "id": 22,
+        "branchId": 12,
+        "departmentId": 23,
+        "name": "Flammable Storage Cabinet B3",
+        "type": "storage",
+        "parentLocationId": null,
+        "createdAt": "2026-09-01T12:42:03.302Z"
+      },
+      {
+        "id": 23,
+        "branchId": 14,
+        "departmentId": 22,
+        "name": "Heavy Tooling Rack T1",
+        "type": "rack",
+        "parentLocationId": null,
+        "createdAt": "2026-09-01T12:42:03.302Z"
+      }
+    ],
+    "machines": [
+      {
+        "id": 17,
+        "branchId": 12,
+        "departmentId": 18,
+        "name": "5-Axis CNC Milling Center",
+        "machineCode": "MCH-CNC-501",
+        "model": "DMG Mori CMX-50V",
+        "status": "active",
+        "createdAt": "2026-09-01T12:42:03.321Z"
+      },
+      {
+        "id": 18,
+        "branchId": 12,
+        "departmentId": 18,
+        "name": "High-Speed Automated Packaging Line 2",
+        "machineCode": "MCH-PKG-002",
+        "model": "Tetra Matrix 400",
+        "status": "active",
+        "createdAt": "2026-09-01T12:42:03.321Z"
+      },
+      {
+        "id": 19,
+        "branchId": 12,
+        "departmentId": 19,
+        "name": "Industrial Hydraulic Press 50 Ton",
+        "machineCode": "MCH-PRS-050",
+        "model": "Enerpac H-50",
+        "status": "active",
+        "createdAt": "2026-09-01T12:42:03.321Z"
+      },
+      {
+        "id": 20,
+        "branchId": 12,
+        "departmentId": 18,
+        "name": "Fiber Laser Cutting Machine",
+        "machineCode": "MCH-LSR-012",
+        "model": "Bystronic BySprint",
+        "status": "maintenance",
+        "createdAt": "2026-09-01T12:42:03.321Z"
+      },
+      {
+        "id": 21,
+        "branchId": 14,
+        "departmentId": 22,
+        "name": "Automated SMT Pick & Place Machine",
+        "machineCode": "MCH-SMT-108",
+        "model": "Yamaha YSM20R",
+        "status": "active",
+        "createdAt": "2026-09-01T12:42:03.321Z"
+      },
+      {
+        "id": 22,
+        "branchId": 12,
+        "departmentId": 19,
+        "name": "Robotic Welding Cell B",
+        "machineCode": "MCH-ROB-004",
+        "model": "KUKA KR Cybertech",
+        "status": "active",
+        "createdAt": "2026-09-01T12:42:03.321Z"
+      }
+    ],
+    "employees": [
+      {
+        "id": 11,
+        "name": "David Miller",
+        "employeeCode": "EMP-1001",
+        "branchId": 12,
+        "userCode": "1001",
+        "phone": "+1 555-1001",
+        "email": "david.miller@company.local",
+        "isActive": true,
+        "createdAt": "2026-09-01T12:42:03.501Z"
+      },
+      {
+        "id": 12,
+        "name": "Sarah Chen",
+        "employeeCode": "EMP-1002",
+        "branchId": 12,
+        "userCode": "1002",
+        "phone": "+1 555-1002",
+        "email": "sarah.chen@company.local",
+        "isActive": true,
+        "createdAt": "2026-09-01T12:42:03.501Z"
+      },
+      {
+        "id": 13,
+        "name": "Marcus Vance",
+        "employeeCode": "EMP-1003",
+        "branchId": 12,
+        "userCode": "1003",
+        "phone": "+1 555-1003",
+        "email": "marcus.vance@company.local",
+        "isActive": true,
+        "createdAt": "2026-09-01T12:42:03.501Z"
+      },
+      {
+        "id": 14,
+        "name": "Elena Rostova",
+        "employeeCode": "EMP-1004",
+        "branchId": 12,
+        "userCode": "1004",
+        "phone": "+1 555-1004",
+        "email": "elena.rostova@company.local",
+        "isActive": true,
+        "createdAt": "2026-09-01T12:42:03.501Z"
+      },
+      {
+        "id": 15,
+        "name": "James Peterson",
+        "employeeCode": "EMP-1005",
+        "branchId": 13,
+        "userCode": "1005",
+        "phone": "+1 555-1005",
+        "email": "james.peterson@company.local",
+        "isActive": true,
+        "createdAt": "2026-09-01T12:42:03.501Z"
+      },
+      {
+        "id": 16,
+        "name": "Aoi Takahashi",
+        "employeeCode": "EMP-1006",
+        "branchId": 14,
+        "userCode": "1006",
+        "phone": "+1 555-1006",
+        "email": "aoi.takahashi@company.local",
+        "isActive": true,
+        "createdAt": "2026-09-01T12:42:03.501Z"
+      }
+    ],
+    "employee_departments": [
+      {
+        "id": 13,
+        "employeeId": 11,
+        "departmentId": 18,
+        "isPrimary": true,
+        "createdAt": "2026-09-01T12:42:03.521Z"
+      },
+      {
+        "id": 14,
+        "employeeId": 11,
+        "departmentId": 19,
+        "isPrimary": false,
+        "createdAt": "2026-09-01T12:42:03.521Z"
+      },
+      {
+        "id": 15,
+        "employeeId": 12,
+        "departmentId": 19,
+        "isPrimary": true,
+        "createdAt": "2026-09-01T12:42:03.521Z"
+      },
+      {
+        "id": 16,
+        "employeeId": 13,
+        "departmentId": 20,
+        "isPrimary": true,
+        "createdAt": "2026-09-01T12:42:03.521Z"
+      },
+      {
+        "id": 17,
+        "employeeId": 14,
+        "departmentId": 18,
+        "isPrimary": true,
+        "createdAt": "2026-09-01T12:42:03.521Z"
+      },
+      {
+        "id": 18,
+        "employeeId": 15,
+        "departmentId": 21,
+        "isPrimary": true,
+        "createdAt": "2026-09-01T12:42:03.521Z"
+      },
+      {
+        "id": 19,
+        "employeeId": 16,
+        "departmentId": 22,
+        "isPrimary": true,
+        "createdAt": "2026-09-01T12:42:03.521Z"
+      }
+    ],
+    "categories": [
+      {
+        "id": 22,
+        "name": "Heavy Machinery & Production Equipment",
+        "code": "CAT-MACH",
+        "type": "asset",
+        "description": "Major manufacturing equipment, CNCs, robotic arms and presses",
+        "createdAt": "2026-09-01T12:42:03.339Z"
+      },
+      {
+        "id": 23,
+        "name": "Precision Diagnostic & Testing Tools",
+        "code": "CAT-DIAG",
+        "type": "asset",
+        "description": "Calibrated gauges, laser meters, oscilloscopes and multimeters",
+        "createdAt": "2026-09-01T12:42:03.339Z"
+      },
+      {
+        "id": 24,
+        "name": "Powered Hand Tools & Equipment",
+        "code": "CAT-TOOL",
+        "type": "asset",
+        "description": "Rotary hammers, torque drills, grinders and pneumatic wrenches",
+        "createdAt": "2026-09-01T12:42:03.339Z"
+      },
+      {
+        "id": 25,
+        "name": "Industrial Lubricants & Fluids",
+        "code": "CAT-LUB",
+        "type": "consumable",
+        "description": "Hydraulic oils, slideway greases, synthetic coolants, degreasers",
+        "createdAt": "2026-09-01T12:42:03.339Z"
+      },
+      {
+        "id": 26,
+        "name": "Fasteners, Seals & O-Rings",
+        "code": "CAT-FAST",
+        "type": "consumable",
+        "description": "High-tensile bolts, flange gaskets, high-temp silicone seals, O-rings",
+        "createdAt": "2026-09-01T12:42:03.339Z"
+      },
+      {
+        "id": 27,
+        "name": "Safety & PPE Consumables",
+        "code": "CAT-PPE",
+        "type": "consumable",
+        "description": "N95 respirators, Kevlar cut-resistant gloves, earplugs, eye shields",
+        "createdAt": "2026-09-01T12:42:03.339Z"
+      },
+      {
+        "id": 28,
+        "name": "Chemicals, Adhesives & Threadlockers",
+        "code": "CAT-CHEM",
+        "type": "consumable",
+        "description": "Anaerobic adhesives, thread sealants, industrial epoxies",
+        "createdAt": "2026-09-01T12:42:03.339Z"
+      }
+    ],
+    "user_category_permissions": [
+      {
+        "id": 19,
+        "userId": 11,
+        "categoryId": 22,
+        "canManage": true,
+        "createdAt": "2026-09-01T12:42:05.054Z"
+      },
+      {
+        "id": 20,
+        "userId": 11,
+        "categoryId": 23,
+        "canManage": true,
+        "createdAt": "2026-09-01T12:42:05.054Z"
+      },
+      {
+        "id": 21,
+        "userId": 11,
+        "categoryId": 24,
+        "canManage": true,
+        "createdAt": "2026-09-01T12:42:05.054Z"
+      },
+      {
+        "id": 22,
+        "userId": 11,
+        "categoryId": 25,
+        "canManage": true,
+        "createdAt": "2026-09-01T12:42:05.054Z"
+      },
+      {
+        "id": 23,
+        "userId": 11,
+        "categoryId": 26,
+        "canManage": true,
+        "createdAt": "2026-09-01T12:42:05.054Z"
+      },
+      {
+        "id": 24,
+        "userId": 11,
+        "categoryId": 27,
+        "canManage": true,
+        "createdAt": "2026-09-01T12:42:05.054Z"
+      },
+      {
+        "id": 25,
+        "userId": 11,
+        "categoryId": 28,
+        "canManage": true,
+        "createdAt": "2026-09-01T12:42:05.054Z"
+      },
+      {
+        "id": 26,
+        "userId": 12,
+        "categoryId": 22,
+        "canManage": true,
+        "createdAt": "2026-09-01T12:42:05.054Z"
+      },
+      {
+        "id": 27,
+        "userId": 12,
+        "categoryId": 25,
+        "canManage": true,
+        "createdAt": "2026-09-01T12:42:05.054Z"
+      },
+      {
+        "id": 28,
+        "userId": 12,
+        "categoryId": 27,
+        "canManage": true,
+        "createdAt": "2026-09-01T12:42:05.054Z"
+      },
+      {
+        "id": 29,
+        "userId": 19,
+        "categoryId": 28,
+        "canManage": true,
+        "createdAt": "2026-09-01T13:31:33.347Z"
+      },
+      {
+        "id": 30,
+        "userId": 19,
+        "categoryId": 26,
+        "canManage": true,
+        "createdAt": "2026-09-01T13:31:33.347Z"
+      },
+      {
+        "id": 31,
+        "userId": 19,
+        "categoryId": 22,
+        "canManage": true,
+        "createdAt": "2026-09-01T13:31:33.347Z"
+      },
+      {
+        "id": 32,
+        "userId": 19,
+        "categoryId": 25,
+        "canManage": true,
+        "createdAt": "2026-09-01T13:31:33.347Z"
+      },
+      {
+        "id": 33,
+        "userId": 19,
+        "categoryId": 24,
+        "canManage": true,
+        "createdAt": "2026-09-01T13:31:33.347Z"
+      },
+      {
+        "id": 34,
+        "userId": 19,
+        "categoryId": 23,
+        "canManage": true,
+        "createdAt": "2026-09-01T13:31:33.347Z"
+      },
+      {
+        "id": 35,
+        "userId": 19,
+        "categoryId": 27,
+        "canManage": true,
+        "createdAt": "2026-09-01T13:31:33.347Z"
+      }
+    ],
+    "custom_fields": [
+      {
+        "id": 24,
+        "categoryId": 22,
+        "name": "voltage_rating",
+        "label": "Operating Voltage (V)",
+        "fieldType": "dropdown",
+        "options": [
+          "110V AC",
+          "220V AC",
+          "380V 3-Phase",
+          "480V 3-Phase"
+        ],
+        "isRequired": true,
+        "defaultValue": null,
+        "createdAt": "2026-09-01T12:42:03.359Z"
+      },
+      {
+        "id": 25,
+        "categoryId": 22,
+        "name": "max_operating_pressure",
+        "label": "Max Operating Pressure (Bar)",
+        "fieldType": "number",
+        "options": null,
+        "isRequired": false,
+        "defaultValue": null,
+        "createdAt": "2026-09-01T12:42:03.359Z"
+      },
+      {
+        "id": 26,
+        "categoryId": 22,
+        "name": "calibration_interval",
+        "label": "Inspection Frequency",
+        "fieldType": "dropdown",
+        "options": [
+          "Monthly",
+          "Quarterly",
+          "Semi-Annual",
+          "Annual"
+        ],
+        "isRequired": true,
+        "defaultValue": null,
+        "createdAt": "2026-09-01T12:42:03.359Z"
+      },
+      {
+        "id": 27,
+        "categoryId": 23,
+        "name": "accuracy_class",
+        "label": "Accuracy Rating / Tolerance",
+        "fieldType": "text",
+        "options": null,
+        "isRequired": true,
+        "defaultValue": null,
+        "createdAt": "2026-09-01T12:42:03.359Z"
+      },
+      {
+        "id": 28,
+        "categoryId": 25,
+        "name": "viscosity_grade",
+        "label": "ISO Viscosity Grade",
+        "fieldType": "dropdown",
+        "options": [
+          "ISO VG 32",
+          "ISO VG 46",
+          "ISO VG 68",
+          "ISO VG 220"
+        ],
+        "isRequired": true,
+        "defaultValue": null,
+        "createdAt": "2026-09-01T12:42:03.359Z"
+      },
+      {
+        "id": 29,
+        "categoryId": 25,
+        "name": "hazard_rating",
+        "label": "Chemical Hazard Level",
+        "fieldType": "radio",
+        "options": [
+          "Low / Non-Hazardous",
+          "Flammable Class 2",
+          "Corrosive"
+        ],
+        "isRequired": true,
+        "defaultValue": null,
+        "createdAt": "2026-09-01T12:42:03.359Z"
+      },
+      {
+        "id": 30,
+        "categoryId": 25,
+        "name": "flash_point",
+        "label": "Flash Point (°C)",
+        "fieldType": "number",
+        "options": null,
+        "isRequired": false,
+        "defaultValue": null,
+        "createdAt": "2026-09-01T12:42:03.359Z"
+      },
+      {
+        "id": 31,
+        "categoryId": 28,
+        "name": "cure_time",
+        "label": "Full Cure Time (Hours)",
+        "fieldType": "number",
+        "options": null,
+        "isRequired": false,
+        "defaultValue": null,
+        "createdAt": "2026-09-01T12:42:03.359Z"
+      }
+    ],
+    "field_sets": [
+      {
+        "id": 11,
+        "categoryId": 22,
+        "name": "Industrial Machinery Technical Specification",
+        "description": "Standard electrical and mechanical properties for heavy assets",
+        "createdAt": "2026-09-01T12:42:03.378Z"
+      },
+      {
+        "id": 12,
+        "categoryId": 25,
+        "name": "Chemical Fluid & Safety Matrix",
+        "description": "Safety, viscosity, and storage parameters",
+        "createdAt": "2026-09-01T12:42:03.378Z"
+      },
+      {
+        "id": 13,
+        "categoryId": 23,
+        "name": "Precision Calibration Standards",
+        "description": "Testing accuracy and calibration tracking parameters",
+        "createdAt": "2026-09-01T12:42:03.378Z"
+      }
+    ],
+    "field_set_items": [
+      {
+        "id": 22,
+        "fieldSetId": 11,
+        "customFieldId": 24,
+        "displayOrder": 1
+      },
+      {
+        "id": 23,
+        "fieldSetId": 11,
+        "customFieldId": 25,
+        "displayOrder": 2
+      },
+      {
+        "id": 24,
+        "fieldSetId": 11,
+        "customFieldId": 26,
+        "displayOrder": 3
+      },
+      {
+        "id": 25,
+        "fieldSetId": 12,
+        "customFieldId": 28,
+        "displayOrder": 1
+      },
+      {
+        "id": 26,
+        "fieldSetId": 12,
+        "customFieldId": 29,
+        "displayOrder": 2
+      },
+      {
+        "id": 27,
+        "fieldSetId": 12,
+        "customFieldId": 30,
+        "displayOrder": 3
+      },
+      {
+        "id": 28,
+        "fieldSetId": 13,
+        "customFieldId": 27,
+        "displayOrder": 1
+      }
+    ],
+    "models": [
+      {
+        "id": 13,
+        "categoryId": 22,
+        "fieldSetId": 11,
+        "name": "DMG Mori CMX-50V CNC",
+        "modelNumber": "MOD-CMX-50V",
+        "minThreshold": 2,
+        "manufacturer": "DMG MORI GmbH",
+        "description": "High precision 5-axis vertical machining center",
+        "imageUrl": null,
+        "customFieldsData": null,
+        "createdAt": "2026-09-01T12:42:03.417Z"
+      },
+      {
+        "id": 14,
+        "categoryId": 24,
+        "fieldSetId": null,
+        "name": "Bosch GBH 8-45 Professional Rotary Hammer",
+        "modelNumber": "MOD-GBH-845",
+        "minThreshold": 3,
+        "manufacturer": "Bosch Power Tools",
+        "description": "Heavy duty SDS-max rotary hammer",
+        "imageUrl": null,
+        "customFieldsData": null,
+        "createdAt": "2026-09-01T12:42:03.417Z"
+      },
+      {
+        "id": 15,
+        "categoryId": 23,
+        "fieldSetId": 13,
+        "name": "Fluke 87V Industrial True-RMS Multimeter",
+        "modelNumber": "MOD-FLK-87V",
+        "minThreshold": 4,
+        "manufacturer": "Fluke Corporation",
+        "description": "Precision electronic diagnostic meter",
+        "imageUrl": null,
+        "customFieldsData": null,
+        "createdAt": "2026-09-01T12:42:03.417Z"
+      },
+      {
+        "id": 16,
+        "categoryId": 25,
+        "fieldSetId": 12,
+        "name": "Mobil Vactra Heavy Medium Slideway Oil",
+        "modelNumber": "MOD-MOB-VAC2",
+        "minThreshold": 50,
+        "manufacturer": "ExxonMobil Corp",
+        "description": "Premium slide-way lubricant with anti-stick slip properties",
+        "imageUrl": null,
+        "customFieldsData": null,
+        "createdAt": "2026-09-01T12:42:03.417Z"
+      },
+      {
+        "id": 17,
+        "categoryId": 27,
+        "fieldSetId": null,
+        "name": "3M Aura Particulate Respirator 9320+ FFP2",
+        "modelNumber": "MOD-3M-9320",
+        "minThreshold": 30,
+        "manufacturer": "3M Industrial Safety",
+        "description": "FFP2 / N95 disposable respirator pack",
+        "imageUrl": null,
+        "customFieldsData": null,
+        "createdAt": "2026-09-01T12:42:03.417Z"
+      },
+      {
+        "id": 18,
+        "categoryId": 28,
+        "fieldSetId": null,
+        "name": "Loctite 243 Medium Strength Threadlocker",
+        "modelNumber": "MOD-LOC-243",
+        "minThreshold": 15,
+        "manufacturer": "Henkel AG",
+        "description": "Anaerobic threadlocking compound 50ml",
+        "imageUrl": null,
+        "customFieldsData": null,
+        "createdAt": "2026-09-01T12:42:03.417Z"
+      },
+      {
+        "id": 19,
+        "categoryId": 26,
+        "fieldSetId": null,
+        "name": "SKF Deep Groove Ball Bearing 6205-2RSH",
+        "modelNumber": "MOD-SKF-6205",
+        "minThreshold": 25,
+        "manufacturer": "SKF Group",
+        "description": "Sealed radial ball bearing for motors and pumps",
+        "imageUrl": null,
+        "customFieldsData": null,
+        "createdAt": "2026-09-01T12:42:03.417Z"
+      }
+    ],
+    "vendors": [
+      {
+        "id": 8,
+        "branchId": 12,
+        "name": "Apex Engineering & Calibration Services",
+        "contactPerson": "Jonathan Vance",
+        "email": "service@apexengineering.com",
+        "phone": "+1 555-7801",
+        "address": "44 Machine Way, Metro Industrial Park",
+        "serviceType": "supplier_and_repair",
+        "createdAt": "2026-09-01T12:42:03.436Z"
+      },
+      {
+        "id": 9,
+        "branchId": 13,
+        "name": "Precision Hydraulics Overhaul Labs",
+        "contactPerson": "Elena Rodriguez",
+        "email": "repairs@precisionhydraulics.net",
+        "phone": "+1 555-7802",
+        "address": "12 Pressure Blvd, West City",
+        "serviceType": "repair",
+        "createdAt": "2026-09-01T12:42:03.436Z"
+      },
+      {
+        "id": 10,
+        "branchId": 14,
+        "name": "Global Industrial Polymers & Fasteners Corp",
+        "contactPerson": "David Ross",
+        "email": "orders@globalfasteners.com",
+        "phone": "+1 555-7803",
+        "address": "900 Global Trade Parkway",
+        "serviceType": "supplier",
+        "createdAt": "2026-09-01T12:42:03.436Z"
+      },
+      {
+        "id": 11,
+        "branchId": 12,
+        "name": "Fluke Certified Metrology & Calibration Labs",
+        "contactPerson": "Sarah Jenkins",
+        "email": "service@flukecal.com",
+        "phone": "+1 555-7804",
+        "address": "77 Test Bench Blvd, North Hub",
+        "serviceType": "supplier_and_repair",
+        "createdAt": "2026-09-01T12:42:03.436Z"
+      }
+    ],
+    "vendor_branch_assignments": [
+      {
+        "id": 5,
+        "vendorId": 8,
+        "branchId": 13,
+        "grantedByUserId": 1,
+        "createdAt": "2026-09-01T12:42:03.457Z"
+      },
+      {
+        "id": 6,
+        "vendorId": 8,
+        "branchId": 14,
+        "grantedByUserId": 1,
+        "createdAt": "2026-09-01T12:42:03.457Z"
+      },
+      {
+        "id": 7,
+        "vendorId": 10,
+        "branchId": 12,
+        "grantedByUserId": 1,
+        "createdAt": "2026-09-01T12:42:03.457Z"
+      },
+      {
+        "id": 8,
+        "vendorId": 11,
+        "branchId": 13,
+        "grantedByUserId": 1,
+        "createdAt": "2026-09-01T12:42:03.457Z"
+      }
+    ],
+    "request_reasons": [
+      {
+        "id": 13,
+        "reason": "Routine Scheduled Maintenance",
+        "categoryType": "all",
+        "isActive": true,
+        "createdAt": "2026-09-01T12:42:03.479Z"
+      },
+      {
+        "id": 14,
+        "reason": "Emergency Machine Breakdown Repair",
+        "categoryType": "all",
+        "isActive": true,
+        "createdAt": "2026-09-01T12:42:03.479Z"
+      },
+      {
+        "id": 15,
+        "reason": "Tool Wear Out / Replacement",
+        "categoryType": "asset",
+        "isActive": true,
+        "createdAt": "2026-09-01T12:42:03.479Z"
+      },
+      {
+        "id": 16,
+        "reason": "Weekly Batch Production Consumable Refill",
+        "categoryType": "consumable",
+        "isActive": true,
+        "createdAt": "2026-09-01T12:42:03.479Z"
+      },
+      {
+        "id": 17,
+        "reason": "Quality Assurance Testing & Calibration",
+        "categoryType": "all",
+        "isActive": true,
+        "createdAt": "2026-09-01T12:42:03.479Z"
+      },
+      {
+        "id": 18,
+        "reason": "Spill Containment & Urgent Safety Measure",
+        "categoryType": "consumable",
+        "isActive": true,
+        "createdAt": "2026-09-01T12:42:03.479Z"
+      }
+    ],
+    "inventory_items": [
+      {
+        "id": 17,
+        "code": "AST-CNC-2024-001",
+        "name": "DMG Mori 5-Axis Milling Unit Alpha-01",
+        "itemType": "asset",
+        "categoryId": 22,
+        "modelId": 13,
+        "supplierId": 8,
+        "uom": "unit",
+        "totalQuantity": 1,
+        "availableQuantity": 1,
+        "minThreshold": 2,
+        "recordDate": "2026-01-10",
+        "status": "available",
+        "customFieldsData": {
+          "voltage_rating": "380V 3-Phase",
+          "calibration_interval": "Quarterly",
+          "max_operating_pressure": 120
+        },
+        "imageUrl": null,
+        "notes": "Primary milling station installed at Shop Floor Bay A1.",
+        "engagementStatus": "engaged",
+        "firstEngagedAt": "2026-07-03T12:42:05.066Z",
+        "lastEngagedAt": "2026-09-01T12:42:05.066Z",
+        "totalEngagementMinutes": 86400,
+        "createdAt": "2026-09-01T12:42:05.075Z"
+      },
+      {
+        "id": 18,
+        "code": "AST-CNC-2024-002",
+        "name": "DMG Mori 5-Axis Milling Unit Alpha-02",
+        "itemType": "asset",
+        "categoryId": 22,
+        "modelId": 13,
+        "supplierId": 8,
+        "uom": "unit",
+        "totalQuantity": 1,
+        "availableQuantity": 1,
+        "minThreshold": 2,
+        "recordDate": "2026-01-15",
+        "status": "available",
+        "customFieldsData": {
+          "voltage_rating": "380V 3-Phase",
+          "calibration_interval": "Quarterly",
+          "max_operating_pressure": 120
+        },
+        "imageUrl": null,
+        "notes": "Secondary milling station at Shop Floor Bay A1.",
+        "engagementStatus": "idle",
+        "firstEngagedAt": null,
+        "lastEngagedAt": null,
+        "totalEngagementMinutes": 43200,
+        "createdAt": "2026-09-01T12:42:05.075Z"
+      },
+      {
+        "id": 19,
+        "code": "AST-HAM-2024-001",
+        "name": "Bosch SDS-Max Rotary Hammer #01",
+        "itemType": "asset",
+        "categoryId": 24,
+        "modelId": 14,
+        "supplierId": 8,
+        "uom": "unit",
+        "totalQuantity": 1,
+        "availableQuantity": 1,
+        "minThreshold": 3,
+        "recordDate": "2026-02-01",
+        "status": "available",
+        "customFieldsData": {},
+        "imageUrl": null,
+        "notes": "Heavy concrete anchoring tool in Workshop Tool Crib.",
+        "engagementStatus": "idle",
+        "firstEngagedAt": null,
+        "lastEngagedAt": null,
+        "totalEngagementMinutes": 9000,
+        "createdAt": "2026-09-01T12:42:05.075Z"
+      },
+      {
+        "id": 20,
+        "code": "AST-HAM-2024-002",
+        "name": "Bosch SDS-Max Rotary Hammer #02",
+        "itemType": "asset",
+        "categoryId": 24,
+        "modelId": 14,
+        "supplierId": 8,
+        "uom": "unit",
+        "totalQuantity": 1,
+        "availableQuantity": 1,
+        "minThreshold": 3,
+        "recordDate": "2026-02-05",
+        "status": "available",
+        "customFieldsData": {},
+        "imageUrl": null,
+        "notes": "Stored in Tool Crib shelf B.",
+        "engagementStatus": "idle",
+        "firstEngagedAt": null,
+        "lastEngagedAt": null,
+        "totalEngagementMinutes": 5400,
+        "createdAt": "2026-09-01T12:42:05.075Z"
+      },
+      {
+        "id": 21,
+        "code": "AST-FLK-2024-001",
+        "name": "Fluke 87V Industrial Multimeter Lab Unit",
+        "itemType": "asset",
+        "categoryId": 23,
+        "modelId": 15,
+        "supplierId": 11,
+        "uom": "unit",
+        "totalQuantity": 1,
+        "availableQuantity": 1,
+        "minThreshold": 4,
+        "recordDate": "2026-02-12",
+        "status": "available",
+        "customFieldsData": {
+          "accuracy_class": "±0.05% DC Voltage accuracy"
+        },
+        "imageUrl": null,
+        "notes": "Calibrated multimeter at Quality Testing Lab Bench 2.",
+        "engagementStatus": "engaged",
+        "firstEngagedAt": "2026-08-12T12:42:05.066Z",
+        "lastEngagedAt": "2026-09-01T12:42:05.066Z",
+        "totalEngagementMinutes": 28800,
+        "createdAt": "2026-09-01T12:42:05.075Z"
+      },
+      {
+        "id": 22,
+        "code": "AST-FLK-2024-002",
+        "name": "Fluke 87V Industrial Multimeter Field Unit",
+        "itemType": "asset",
+        "categoryId": 23,
+        "modelId": 15,
+        "supplierId": 11,
+        "uom": "unit",
+        "totalQuantity": 1,
+        "availableQuantity": 1,
+        "minThreshold": 4,
+        "recordDate": "2026-02-15",
+        "status": "available",
+        "customFieldsData": {
+          "accuracy_class": "±0.05% DC Voltage accuracy"
+        },
+        "imageUrl": null,
+        "notes": "Field technician diagnostic kit.",
+        "engagementStatus": "idle",
+        "firstEngagedAt": null,
+        "lastEngagedAt": null,
+        "totalEngagementMinutes": 2700,
+        "createdAt": "2026-09-01T12:42:05.075Z"
+      },
+      {
+        "id": 23,
+        "code": "CON-LUB-MOB-200L",
+        "name": "Mobil Vactra Slideway Oil No. 2 Drum Batch",
+        "itemType": "consumable",
+        "categoryId": 25,
+        "modelId": 16,
+        "supplierId": 8,
+        "uom": "liter",
+        "totalQuantity": 200,
+        "availableQuantity": 35,
+        "minThreshold": 50,
+        "recordDate": "2026-03-01",
+        "status": "low_stock",
+        "customFieldsData": {
+          "flash_point": 228,
+          "hazard_rating": "Low / Non-Hazardous",
+          "viscosity_grade": "ISO VG 68"
+        },
+        "imageUrl": null,
+        "notes": "Stock level (35 L) is below model minimum threshold (50 L). Automated reorder recommended.",
+        "engagementStatus": "idle",
+        "firstEngagedAt": null,
+        "lastEngagedAt": null,
+        "totalEngagementMinutes": 0,
+        "createdAt": "2026-09-01T12:42:05.075Z"
+      },
+      {
+        "id": 24,
+        "code": "CON-PPE-N95-BX",
+        "name": "3M Aura FFP2 / N95 Respirator Mask Boxes",
+        "itemType": "consumable",
+        "categoryId": 27,
+        "modelId": 17,
+        "supplierId": 10,
+        "uom": "package",
+        "totalQuantity": 100,
+        "availableQuantity": 18,
+        "minThreshold": 30,
+        "recordDate": "2026-03-05",
+        "status": "low_stock",
+        "customFieldsData": {},
+        "imageUrl": null,
+        "notes": "Stock level (18 boxes) is below model minimum threshold (30 boxes). Cleanroom replenishment required.",
+        "engagementStatus": "idle",
+        "firstEngagedAt": null,
+        "lastEngagedAt": null,
+        "totalEngagementMinutes": 0,
+        "createdAt": "2026-09-01T12:42:05.075Z"
+      },
+      {
+        "id": 25,
+        "code": "CON-LOC-243-50ML",
+        "name": "Loctite 243 Medium Threadlocker 50ml Bottles",
+        "itemType": "consumable",
+        "categoryId": 28,
+        "modelId": 18,
+        "supplierId": 10,
+        "uom": "bottle",
+        "totalQuantity": 60,
+        "availableQuantity": 45,
+        "minThreshold": 15,
+        "recordDate": "2026-02-25",
+        "status": "available",
+        "customFieldsData": {
+          "cure_time": 24
+        },
+        "imageUrl": null,
+        "notes": "Standard assembly chemical supplies in good standing.",
+        "engagementStatus": "idle",
+        "firstEngagedAt": null,
+        "lastEngagedAt": null,
+        "totalEngagementMinutes": 0,
+        "createdAt": "2026-09-01T12:42:05.075Z"
+      },
+      {
+        "id": 26,
+        "code": "CON-BEAR-SKF-6205",
+        "name": "SKF 6205-2RSH Deep Groove Ball Bearings",
+        "itemType": "consumable",
+        "categoryId": 26,
+        "modelId": 19,
+        "supplierId": 10,
+        "uom": "unit",
+        "totalQuantity": 50,
+        "availableQuantity": 12,
+        "minThreshold": 25,
+        "recordDate": "2026-02-28",
+        "status": "low_stock",
+        "customFieldsData": {},
+        "imageUrl": null,
+        "notes": "Motor refurbishment spare parts below 25 unit threshold.",
+        "engagementStatus": "idle",
+        "firstEngagedAt": null,
+        "lastEngagedAt": null,
+        "totalEngagementMinutes": 0,
+        "createdAt": "2026-09-01T12:42:05.075Z"
+      },
+      {
+        "id": 27,
+        "code": "CON-SEAL-NBR-ROLL",
+        "name": "Nitrile High-Grade Rubber Gasket Cord 5mm",
+        "itemType": "consumable",
+        "categoryId": 26,
+        "modelId": null,
+        "supplierId": 10,
+        "uom": "meter",
+        "totalQuantity": 500,
+        "availableQuantity": 320,
+        "minThreshold": 60,
+        "recordDate": "2026-02-20",
+        "status": "available",
+        "customFieldsData": {},
+        "imageUrl": null,
+        "notes": "Continuous roll for chamber sealing.",
+        "engagementStatus": "idle",
+        "firstEngagedAt": null,
+        "lastEngagedAt": null,
+        "totalEngagementMinutes": 0,
+        "createdAt": "2026-09-01T12:42:05.075Z"
+      }
+    ],
+    "stock_locations": [
+      {
+        "id": 20,
+        "itemId": 17,
+        "branchId": 12,
+        "departmentId": 18,
+        "locationId": 18,
+        "machineId": 17,
+        "quantity": 1,
+        "updatedAt": "2026-09-01T12:42:05.096Z"
+      },
+      {
+        "id": 21,
+        "itemId": 18,
+        "branchId": 12,
+        "departmentId": 18,
+        "locationId": 18,
+        "machineId": null,
+        "quantity": 1,
+        "updatedAt": "2026-09-01T12:42:05.096Z"
+      },
+      {
+        "id": 23,
+        "itemId": 20,
+        "branchId": 12,
+        "departmentId": 19,
+        "locationId": 19,
+        "machineId": null,
+        "quantity": 1,
+        "updatedAt": "2026-09-01T12:42:05.096Z"
+      },
+      {
+        "id": 24,
+        "itemId": 21,
+        "branchId": 12,
+        "departmentId": 20,
+        "locationId": 20,
+        "machineId": null,
+        "quantity": 1,
+        "updatedAt": "2026-09-01T12:42:05.096Z"
+      },
+      {
+        "id": 25,
+        "itemId": 22,
+        "branchId": 12,
+        "departmentId": 20,
+        "locationId": 20,
+        "machineId": null,
+        "quantity": 1,
+        "updatedAt": "2026-09-01T12:42:05.096Z"
+      },
+      {
+        "id": 26,
+        "itemId": 23,
+        "branchId": 12,
+        "departmentId": 18,
+        "locationId": 18,
+        "machineId": 17,
+        "quantity": 20,
+        "updatedAt": "2026-09-01T12:42:05.096Z"
+      },
+      {
+        "id": 27,
+        "itemId": 23,
+        "branchId": 12,
+        "departmentId": 23,
+        "locationId": 22,
+        "machineId": null,
+        "quantity": 15,
+        "updatedAt": "2026-09-01T12:42:05.096Z"
+      },
+      {
+        "id": 28,
+        "itemId": 24,
+        "branchId": 12,
+        "departmentId": 20,
+        "locationId": 20,
+        "machineId": null,
+        "quantity": 18,
+        "updatedAt": "2026-09-01T12:42:05.096Z"
+      },
+      {
+        "id": 29,
+        "itemId": 25,
+        "branchId": 12,
+        "departmentId": 18,
+        "locationId": 18,
+        "machineId": null,
+        "quantity": 45,
+        "updatedAt": "2026-09-01T12:42:05.096Z"
+      },
+      {
+        "id": 30,
+        "itemId": 26,
+        "branchId": 12,
+        "departmentId": 19,
+        "locationId": 19,
+        "machineId": 19,
+        "quantity": 12,
+        "updatedAt": "2026-09-01T12:42:05.096Z"
+      },
+      {
+        "id": 31,
+        "itemId": 27,
+        "branchId": 12,
+        "departmentId": 18,
+        "locationId": 18,
+        "machineId": null,
+        "quantity": 320,
+        "updatedAt": "2026-09-01T12:42:05.096Z"
+      },
+      {
+        "id": 22,
+        "itemId": 19,
+        "branchId": 12,
+        "departmentId": 19,
+        "locationId": 19,
+        "machineId": null,
+        "quantity": 0,
+        "updatedAt": "2026-09-01T12:42:05.096Z"
+      },
+      {
+        "id": 32,
+        "itemId": 19,
+        "branchId": 13,
+        "departmentId": 23,
+        "locationId": null,
+        "machineId": null,
+        "quantity": 1,
+        "updatedAt": "2026-09-01T13:41:17.178Z"
+      }
+    ],
+    "employee_requests": [
+      {
+        "id": 3,
+        "requestId": "REQ-2026-001",
+        "employeeId": 11,
+        "branchId": 12,
+        "departmentId": 18,
+        "itemId": 23,
+        "requestedQty": 10,
+        "uom": "liter",
+        "reasonId": 16,
+        "reasonText": "Weekly Batch Production Consumable Refill",
+        "machineId": 17,
+        "securityPinEntered": "1001",
+        "status": "issued",
+        "requestedAt": "2026-08-31T12:42:05.127Z",
+        "issuedAt": "2026-08-31T16:42:05.127Z",
+        "issuedByUserId": 12,
+        "managerNotes": "Approved and issued 10 Liters of Mobil Vactra Oil to CNC Milling Center."
+      },
+      {
+        "id": 4,
+        "requestId": "REQ-2026-002",
+        "employeeId": 12,
+        "branchId": 12,
+        "departmentId": 19,
+        "itemId": 19,
+        "requestedQty": 1,
+        "uom": "unit",
+        "reasonId": 14,
+        "reasonText": "Emergency Machine Breakdown Repair",
+        "machineId": 19,
+        "securityPinEntered": "1002",
+        "status": "pending",
+        "requestedAt": "2026-09-01T10:42:05.127Z",
+        "issuedAt": null,
+        "issuedByUserId": null,
+        "managerNotes": null
+      },
+      {
+        "id": 5,
+        "requestId": "REQ-2026-003",
+        "employeeId": 14,
+        "branchId": 12,
+        "departmentId": 18,
+        "itemId": 24,
+        "requestedQty": 5,
+        "uom": "package",
+        "reasonId": 18,
+        "reasonText": "Spill Containment & Urgent Safety Measure",
+        "machineId": null,
+        "securityPinEntered": "1004",
+        "status": "approved",
+        "requestedAt": "2026-09-01T08:42:05.127Z",
+        "issuedAt": null,
+        "issuedByUserId": null,
+        "managerNotes": "Approved for assembly team shift PPE replenishment."
+      }
+    ],
+    "inventory_movements": [
+      {
+        "id": 2,
+        "itemId": 25,
+        "quantity": 10,
+        "uom": "bottle",
+        "movementType": "branch_to_branch",
+        "status": "pending_acceptance",
+        "fromBranchId": 12,
+        "toBranchId": 13,
+        "fromDepartmentId": null,
+        "toDepartmentId": 21,
+        "fromLocationId": null,
+        "toLocationId": 21,
+        "toMachineId": null,
+        "movedByUserId": 10,
+        "acceptedByUserId": null,
+        "acceptedAt": null,
+        "rejectionReason": null,
+        "notes": "Inter-branch shipment of 10 Loctite bottles for West Hub stock rebalance.",
+        "createdAt": "2026-09-01T06:42:05.108Z"
+      },
+      {
+        "id": 3,
+        "itemId": 23,
+        "quantity": 20,
+        "uom": "liter",
+        "movementType": "location_to_location",
+        "status": "completed",
+        "fromBranchId": 12,
+        "toBranchId": 12,
+        "fromDepartmentId": null,
+        "toDepartmentId": 18,
+        "fromLocationId": null,
+        "toLocationId": 18,
+        "toMachineId": 17,
+        "movedByUserId": 12,
+        "acceptedByUserId": null,
+        "acceptedAt": null,
+        "rejectionReason": null,
+        "notes": "Slideway oil allocated directly to CNC Milling Machine reservoir.",
+        "createdAt": "2026-08-30T12:42:05.108Z"
+      },
+      {
+        "id": 4,
+        "itemId": 17,
+        "quantity": 1,
+        "uom": "unit",
+        "movementType": "assigned_to_machine",
+        "status": "completed",
+        "fromBranchId": 12,
+        "toBranchId": 12,
+        "fromDepartmentId": null,
+        "toDepartmentId": 18,
+        "fromLocationId": null,
+        "toLocationId": 18,
+        "toMachineId": 17,
+        "movedByUserId": 11,
+        "acceptedByUserId": null,
+        "acceptedAt": null,
+        "rejectionReason": null,
+        "notes": "Assigned asset to primary 5-Axis CNC Milling Center.",
+        "createdAt": "2026-08-22T12:42:05.108Z"
+      },
+      {
+        "id": 5,
+        "itemId": 19,
+        "quantity": 1,
+        "uom": "unit",
+        "movementType": "branch_to_branch",
+        "status": "accepted",
+        "fromBranchId": 12,
+        "toBranchId": 13,
+        "fromDepartmentId": null,
+        "toDepartmentId": 23,
+        "fromLocationId": null,
+        "toLocationId": null,
+        "toMachineId": null,
+        "movedByUserId": 14,
+        "acceptedByUserId": 14,
+        "acceptedAt": "2026-09-01T13:41:17.190Z",
+        "rejectionReason": null,
+        "notes": "",
+        "createdAt": "2026-09-01T13:00:24.678Z"
+      }
+    ],
+    "vendor_repairs": [
+      {
+        "id": 2,
+        "itemId": 20,
+        "vendorId": 8,
+        "branchId": 12,
+        "sentDate": "2026-02-15",
+        "expectedReturnDate": "2026-03-10",
+        "returnedDate": null,
+        "issueDescription": "Gearbox clutch slipping under heavy drilling load. Precision armature overhaul required.",
+        "repairCost": 165,
+        "status": "sent_to_vendor",
+        "engagedDurationMinutes": 259200,
+        "managerNotes": "Asset was heavily utilized in tooling workshop before clutch wear.",
+        "createdAt": "2026-09-01T12:42:05.155Z"
+      },
+      {
+        "id": 3,
+        "itemId": 22,
+        "vendorId": 11,
+        "branchId": 12,
+        "sentDate": "2026-01-20",
+        "expectedReturnDate": "2026-02-05",
+        "returnedDate": "2026-02-04",
+        "issueDescription": "Annual ISO 17025 metrology calibration and test probe replacement.",
+        "repairCost": 85,
+        "status": "returned",
+        "engagedDurationMinutes": 432000,
+        "managerNotes": "Calibration certificate verified and filed in QA portal.",
+        "createdAt": "2026-09-01T12:42:05.155Z"
+      }
+    ],
+    "entry_logs": [
+      {
+        "id": 44,
+        "userId": 10,
+        "userName": "Arthur Pendelton (Admin)",
+        "userRole": "admin",
+        "branchId": 12,
+        "action": "INITIALIZE_SYSTEM",
+        "entityType": "system",
+        "entityId": "SYS-INIT",
+        "details": "Initial corporate branches, multi-tier departments, asset/consumable categories, and UOM standards configured.",
+        "createdAt": "2026-08-27T12:42:05.168Z"
+      },
+      {
+        "id": 45,
+        "userId": 11,
+        "userName": "Claire Sterling (Super Manager)",
+        "userRole": "super_manager",
+        "branchId": 12,
+        "action": "CREATE_MODEL_AND_FIELDS",
+        "entityType": "model",
+        "entityId": "MOD-CMX-50V",
+        "details": "Created DMG Mori CNC model (Threshold: 2 units) and bound Technical Specifications field set.",
+        "createdAt": "2026-08-29T12:42:05.168Z"
+      },
+      {
+        "id": 46,
+        "userId": 12,
+        "userName": "Robert Fox (Manager)",
+        "userRole": "manager",
+        "branchId": 12,
+        "action": "ISSUE_REQUEST",
+        "entityType": "request",
+        "entityId": "REQ-2026-001",
+        "details": "Issued 10 Liters of Mobil Vactra Oil to Employee David Miller for CNC-501.",
+        "createdAt": "2026-08-31T16:42:05.168Z"
+      },
+      {
+        "id": 47,
+        "userId": 10,
+        "userName": "Arthur Pendelton (Admin)",
+        "userRole": "admin",
+        "branchId": 12,
+        "action": "STOCK_TRANSFER_INITIATED",
+        "entityType": "movement",
+        "entityId": "MOV-WEST-REBALANCE",
+        "details": "Initiated inter-branch stock transfer of 10 Loctite 243 bottles to West Logistics Hub.",
+        "createdAt": "2026-09-01T06:42:05.168Z"
+      },
+      {
+        "id": 48,
+        "userId": 14,
+        "userName": "Au Finja ERP",
+        "userRole": "admin",
+        "branchId": 13,
+        "action": "INITIATE_BRANCH_TRANSFER",
+        "entityType": "movement",
+        "entityId": "5",
+        "details": "Initiated branch transfer of 1 unit of Bosch SDS-Max Rotary Hammer #01 (AST-HAM-2024-001) to Branch #13 (Awaiting Manager Acceptance)",
+        "createdAt": "2026-09-01T13:00:24.699Z"
+      },
+      {
+        "id": 49,
+        "userId": 14,
+        "userName": "Au Finja ERP",
+        "userRole": "admin",
+        "branchId": 13,
+        "action": "CREATE_USER",
+        "entityType": "user",
+        "entityId": "19",
+        "details": "Created manager user Test (test@aufinja.com) with global or branch access",
+        "createdAt": "2026-09-01T13:31:33.367Z"
+      },
+      {
+        "id": 50,
+        "userId": 19,
+        "userName": "Test",
+        "userRole": "manager",
+        "branchId": 13,
+        "action": "USER_LOGIN",
+        "entityType": "auth",
+        "entityId": "19",
+        "details": "User Test (test@aufinja.com) logged in successfully as manager",
+        "createdAt": "2026-09-01T13:31:49.799Z"
+      },
+      {
+        "id": 51,
+        "userId": 14,
+        "userName": "Au Finja ERP",
+        "userRole": "manager",
+        "branchId": 13,
+        "action": "ACCEPT_BRANCH_TRANSFER",
+        "entityType": "movement",
+        "entityId": "5",
+        "details": "Branch manager accepted & allocated transfer #5 (1 unit of Bosch SDS-Max Rotary Hammer #01) to Dept #23",
+        "createdAt": "2026-09-01T13:41:17.223Z"
+      },
+      {
+        "id": 52,
+        "userId": 10,
+        "userName": "Arthur Pendelton",
+        "userRole": "admin",
+        "branchId": 12,
+        "action": "USER_LOGIN",
+        "entityType": "auth",
+        "entityId": "10",
+        "details": "User Arthur Pendelton (admin) logged in successfully as admin",
+        "createdAt": "2026-09-02T14:39:52.557Z"
+      },
+      {
+        "id": 53,
+        "userId": 14,
+        "userName": "Au Finja ERP",
+        "userRole": "admin",
+        "branchId": 12,
+        "action": "INIT_DATABASE_TABLES",
+        "entityType": "SYSTEM_DATABASE",
+        "entityId": "0",
+        "details": "Database tables initialized/verified (22 tables active)",
+        "createdAt": "2026-09-03T16:15:18.085Z"
+      }
+    ],
+    "pm_plans": [],
+    "pm_schedules": [],
+    "pm_work_orders": [],
+    "users": [
+      {
+        "id": 10,
+        "uid": "admin-001",
+        "email": "admin",
+        "password": "$2b$12$8j7bXlCbLPv9QBnKkjs4YeKZnr1Cs6mlOs.MXbHnkHVvw/4nnWXHi",
+        "name": "Arthur Pendelton",
+        "role": "admin",
+        "branchId": 12,
+        "departmentId": 18,
+        "userCode": "9999",
+        "isActive": true,
+        "createdAt": "2026-09-01T12:42:05.035Z"
+      },
+      {
+        "id": 11,
+        "uid": "super-001",
+        "email": "super@company.local",
+        "password": "$2b$12$jjiuqh569tbtd95rxuXfsuiT/IW6T7ChyeqC7H/NhDWvRzqskxCYy",
+        "name": "Claire Sterling",
+        "role": "super_manager",
+        "branchId": 12,
+        "departmentId": 18,
+        "userCode": "8888",
+        "isActive": true,
+        "createdAt": "2026-09-01T12:42:05.035Z"
+      },
+      {
+        "id": 12,
+        "uid": "mgr-001",
+        "email": "manager.hq@company.local",
+        "password": "$2b$12$hIn/2.63yR.O6MJaKm2Nc.tzUtabAekGJvbFj7LVJ0JxHBXFLRNF6",
+        "name": "Robert Fox",
+        "role": "manager",
+        "branchId": 12,
+        "departmentId": 18,
+        "userCode": "7777",
+        "isActive": true,
+        "createdAt": "2026-09-01T12:42:05.035Z"
+      },
+      {
+        "id": 13,
+        "uid": "dept-001",
+        "email": "dept.prod@company.local",
+        "password": "$2b$12$Frt8ffHCDQn8mAElOlSCIOuhEMAUs5eVjFQZCexetinLxTv7C2/Sy",
+        "name": "Assembly Dept Terminal",
+        "role": "department",
+        "branchId": 12,
+        "departmentId": 18,
+        "userCode": "1001",
+        "isActive": true,
+        "createdAt": "2026-09-01T12:42:05.035Z"
+      },
+      {
+        "id": 14,
+        "uid": "gbfEf1NI3yZbBTiolIF3uPHV6103",
+        "email": "erpaufinja@gmail.com",
+        "password": "$2b$12$Zy2KqDUSoU8YSJ0aSwzTBu4xq4U3OTF1kKSoqO8rwUfRdpbSYAi7e",
+        "name": "Au Finja ERP",
+        "role": "admin",
+        "branchId": 1,
+        "departmentId": 1,
+        "userCode": null,
+        "isActive": true,
+        "createdAt": "2026-09-01T12:43:32.163Z"
+      },
+      {
+        "id": 19,
+        "uid": "user_1788269492909_1burw",
+        "email": "test@aufinja.com",
+        "password": "$2b$12$iBLh86wbl4hZLYe/mJtsWuhYYiZ2PdSLkKi9cBBXgPeesYgIfjV0C",
+        "name": "Test",
+        "role": "manager",
+        "branchId": 13,
+        "departmentId": null,
+        "userCode": null,
+        "isActive": true,
+        "createdAt": "2026-09-01T13:31:33.326Z"
+      }
+    ]
+  }
+}

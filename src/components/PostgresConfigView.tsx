@@ -40,16 +40,18 @@ import {
   Users,
   X,
   ShieldAlert,
+  HardDriveDownload,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.tsx';
 import { fetchApi } from '../lib/api.ts';
 import { PostgresConfigInfo, DbConnectionTestResult, DbTableStat } from '../types.ts';
+import { DatabaseBackupRestoreView } from './DatabaseBackupRestoreView.tsx';
 
 export const PostgresConfigView: React.FC = () => {
   const { showToast, currentRole } = useApp();
   const [config, setConfig] = useState<PostgresConfigInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeSubTab, setActiveSubTab] = useState<'diagnostics' | 'table_reset' | 'tester' | 'truenas' | 'docker_ci'>('diagnostics');
+  const [activeSubTab, setActiveSubTab] = useState<'diagnostics' | 'backup_restore' | 'table_reset' | 'tester' | 'truenas' | 'docker_ci'>('diagnostics');
 
   // Connection Tester State
   const [testMode, setTestMode] = useState<'params' | 'uri'>('params');
@@ -522,17 +524,17 @@ GEMINI_API_KEY=
   return (
     <div className="space-y-6">
       {/* Top Header Card */}
-      <div className="bg-white rounded-2xl border border-slate-200/80 p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white rounded-2xl border border-slate-200/70 p-5 sm:p-6 shadow-2xs flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
-              <Database className="w-5 h-5" />
+            <div className="w-9 h-9 rounded-xl bg-amber-50 border border-amber-200/70 flex items-center justify-center text-amber-700 shrink-0">
+              <Database className="w-4 h-4" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-xl font-bold text-slate-900">PostgreSQL Server & TrueNAS SCALE Setup</h2>
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <h2 className="text-lg font-semibold text-slate-800">PostgreSQL Server & TrueNAS SCALE Setup</h2>
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
                   Active Database Engine
                 </span>
               </div>
@@ -547,7 +549,7 @@ GEMINI_API_KEY=
           <button
             onClick={loadConfig}
             disabled={loading}
-            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+            className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-medium rounded-xl flex items-center gap-1.5 transition cursor-pointer"
             title="Refresh database diagnostics"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
@@ -557,7 +559,7 @@ GEMINI_API_KEY=
           <button
             onClick={handleInitTables}
             disabled={initializingTables}
-            className="px-3.5 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+            className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100/70 text-amber-800 border border-amber-200 text-xs font-medium rounded-xl flex items-center gap-1.5 transition cursor-pointer"
             title="Initialize and verify all PostgreSQL database tables and default schema"
           >
             <Database className={`w-3.5 h-3.5 ${initializingTables ? 'animate-spin' : ''}`} />
@@ -567,7 +569,7 @@ GEMINI_API_KEY=
           <button
             onClick={handleRunVacuum}
             disabled={vacuuming}
-            className="px-3.5 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+            className="px-3 py-1.5 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 text-xs font-medium rounded-xl flex items-center gap-1.5 transition cursor-pointer"
             title="Run VACUUM ANALYZE to optimize indexes and table performance"
           >
             <Zap className={`w-3.5 h-3.5 ${vacuuming ? 'animate-spin' : ''}`} />
@@ -579,128 +581,152 @@ GEMINI_API_KEY=
       {/* Top Metrics Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Metric 1 */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex items-center justify-between">
+        <div className="bg-white rounded-xl border border-slate-200/70 p-4 shadow-2xs flex items-center justify-between">
           <div>
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Database Status</p>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-base font-bold text-slate-900">
+            <p className="text-[11px] font-medium text-slate-400">Database Status</p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-sm font-semibold text-slate-800">
                 {config?.connected ? 'Online & Healthy' : 'Disconnected'}
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 mt-1 truncate">
+            <p className="text-[11px] text-slate-400 mt-0.5 truncate">
               {config?.databaseName ? `DB: ${config.databaseName}` : 'assetflow_db'}
             </p>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
-            <CheckCircle2 className="w-6 h-6" />
+          <div className="w-9 h-9 rounded-lg bg-emerald-50 border border-emerald-200/70 flex items-center justify-center text-emerald-600">
+            <CheckCircle2 className="w-5 h-5" />
           </div>
         </div>
 
         {/* Metric 2 */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex items-center justify-between">
+        <div className="bg-white rounded-xl border border-slate-200/70 p-4 shadow-2xs flex items-center justify-between">
           <div>
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Host & Port</p>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-base font-bold text-slate-900 font-mono">
+            <p className="text-[11px] font-medium text-slate-400">Host & Port</p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-sm font-semibold text-slate-800 font-mono">
                 {config?.host || 'localhost'}:{config?.port || 5432}
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">
-              User: <span className="font-semibold text-slate-700">{config?.user || 'postgres'}</span>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              User: <span className="font-medium text-slate-600">{config?.user || 'postgres'}</span>
             </p>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
-            <Server className="w-6 h-6" />
+          <div className="w-9 h-9 rounded-lg bg-slate-50 border border-slate-200/70 flex items-center justify-center text-slate-600">
+            <Server className="w-5 h-5" />
           </div>
         </div>
 
         {/* Metric 3 */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex items-center justify-between">
+        <div className="bg-white rounded-xl border border-slate-200/70 p-4 shadow-2xs flex items-center justify-between">
           <div>
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Storage & Volume</p>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-base font-bold text-slate-900">
+            <p className="text-[11px] font-medium text-slate-400">Storage & Volume</p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-sm font-semibold text-slate-800">
                 {config?.databaseSize || 'Calculated'}
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">
-              Active Connections: <span className="font-semibold text-slate-700">{config?.activeConnections || 1}</span> / {config?.poolMax || 10}
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Active Connections: <span className="font-medium text-slate-600">{config?.activeConnections || 1}</span> / {config?.poolMax || 10}
             </p>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600">
-            <HardDrive className="w-6 h-6" />
+          <div className="w-9 h-9 rounded-lg bg-slate-50 border border-slate-200/70 flex items-center justify-center text-slate-600">
+            <HardDrive className="w-5 h-5" />
           </div>
         </div>
 
         {/* Metric 4 */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 p-5 shadow-xs flex items-center justify-between">
+        <div className="bg-white rounded-xl border border-slate-200/70 p-4 shadow-2xs flex items-center justify-between">
           <div>
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Schema & Tables</p>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-base font-bold text-slate-900">
+            <p className="text-[11px] font-medium text-slate-400">Schema & Tables</p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-sm font-semibold text-slate-800">
                 {config?.tableStats?.length || 14} Tables
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">
-              Total Records: <span className="font-semibold text-slate-700">{totalRecords.toLocaleString()}</span>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Total Records: <span className="font-medium text-slate-600">{totalRecords.toLocaleString()}</span>
             </p>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-purple-50 border border-purple-200 flex items-center justify-center text-purple-600">
-            <Layers className="w-6 h-6" />
+          <div className="w-9 h-9 rounded-lg bg-amber-50 border border-amber-200/70 flex items-center justify-center text-amber-700">
+            <Layers className="w-5 h-5" />
           </div>
         </div>
       </div>
 
       {/* Navigation Sub-Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pb-2 overflow-x-auto">
+      <div className="flex items-center gap-1.5 border-b border-slate-200 pb-2 overflow-x-auto">
         <button
           onClick={() => setActiveSubTab('diagnostics')}
-          className={`px-4 py-2 text-xs font-bold rounded-xl transition flex items-center gap-2 cursor-pointer ${
+          title="Inspect live PostgreSQL schema, table sizes, connections, and system metrics"
+          className={`px-3.5 py-1.5 text-xs font-medium rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
             activeSubTab === 'diagnostics'
-              ? 'bg-blue-600 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
+              ? 'bg-amber-500 text-white shadow-2xs'
+              : 'text-slate-600 hover:bg-slate-100/70'
           }`}
         >
-          <Activity className="w-4 h-4" />
+          <Activity className="w-3.5 h-3.5" />
           <span>Live Schema & Diagnostics</span>
         </button>
+
+        {(currentRole === 'admin' || currentRole === 'super_manager') && (
+          <button
+            onClick={() => setActiveSubTab('backup_restore')}
+            title="Export PostgreSQL SQL dumps, JSON backups, or restore from local files"
+            className={`px-3.5 py-1.5 text-xs font-medium rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
+              activeSubTab === 'backup_restore'
+                ? 'bg-amber-500 text-white shadow-2xs'
+                : 'text-slate-600 hover:bg-slate-100/70'
+            }`}
+          >
+            <HardDriveDownload className="w-3.5 h-3.5" />
+            <span>Backup & Restore</span>
+            <span className={`px-1.5 py-0.2 rounded text-[10px] font-medium ${
+              activeSubTab === 'backup_restore' ? 'bg-amber-600 text-amber-100' : 'bg-amber-50 text-amber-800 border border-amber-200/60'
+            }`}>
+              SQL / JSON
+            </span>
+          </button>
+        )}
 
         {currentRole === 'admin' && (
           <button
             onClick={() => setActiveSubTab('table_reset')}
-            className={`px-4 py-2 text-xs font-bold rounded-xl transition flex items-center gap-2 cursor-pointer ${
+            title="Selectively truncate and reset database tables with CASCADE"
+            className={`px-3.5 py-1.5 text-xs font-medium rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
               activeSubTab === 'table_reset'
-                ? 'bg-rose-600 text-white shadow-xs'
-                : 'text-rose-700 bg-rose-50/80 hover:bg-rose-100 border border-rose-200'
+                ? 'bg-rose-600 text-white shadow-2xs'
+                : 'text-rose-700 bg-rose-50/70 hover:bg-rose-100 border border-rose-200'
             }`}
           >
-            <RotateCcw className="w-4 h-4" />
+            <RotateCcw className="w-3.5 h-3.5" />
             <span>Reset Datatables</span>
-            <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-rose-200 text-rose-900 font-bold">Admin</span>
+            <span className={`px-1.5 py-0.2 rounded text-[10px] font-medium ${
+              activeSubTab === 'table_reset' ? 'bg-rose-700 text-rose-100' : 'bg-rose-100 text-rose-800'
+            }`}>Admin</span>
           </button>
         )}
 
         <button
           onClick={() => setActiveSubTab('tester')}
-          className={`px-4 py-2 text-xs font-bold rounded-xl transition flex items-center gap-2 cursor-pointer ${
+          className={`px-3.5 py-1.5 text-xs font-medium rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
             activeSubTab === 'tester'
-              ? 'bg-blue-600 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
+              ? 'bg-amber-500 text-white shadow-2xs'
+              : 'text-slate-600 hover:bg-slate-100/70'
           }`}
         >
-          <Zap className="w-4 h-4" />
+          <Zap className="w-3.5 h-3.5" />
           <span>Connection Tester</span>
         </button>
 
         <button
           onClick={() => setActiveSubTab('truenas')}
-          className={`px-4 py-2 text-xs font-bold rounded-xl transition flex items-center gap-2 cursor-pointer ${
+          className={`px-3.5 py-1.5 text-xs font-medium rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
             activeSubTab === 'truenas'
-              ? 'bg-blue-600 text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-100'
+              ? 'bg-amber-500 text-white shadow-2xs'
+              : 'text-slate-600 hover:bg-slate-100/70'
           }`}
         >
-          <HardDrive className="w-4 h-4" />
+          <HardDrive className="w-3.5 h-3.5" />
           <span>TrueNAS SCALE Hosting</span>
         </button>
 
@@ -866,6 +892,11 @@ GEMINI_API_KEY=
             </div>
           </div>
         </div>
+      )}
+
+      {/* Sub-Tab: Database Backup & Local Restore */}
+      {activeSubTab === 'backup_restore' && (currentRole === 'admin' || currentRole === 'super_manager') && (
+        <DatabaseBackupRestoreView />
       )}
 
       {/* Sub-Tab: Admin Table Reset / Data Purge */}
@@ -1182,10 +1213,12 @@ GEMINI_API_KEY=
                       <label className="font-bold text-slate-700">PostgreSQL Host / IP Address</label>
                       <input
                         type="text"
+                        tabIndex={1}
                         value={testHost}
                         onChange={(e) => setTestHost(e.target.value)}
                         placeholder="e.g. 192.168.1.50 or postgres"
-                        className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono focus:ring-2 focus:ring-blue-500"
+                        title="PostgreSQL server hostname or LAN IP address (Press Tab for Port)"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00]"
                         required
                       />
                     </div>
@@ -1193,10 +1226,12 @@ GEMINI_API_KEY=
                       <label className="font-bold text-slate-700">Port</label>
                       <input
                         type="number"
+                        tabIndex={2}
                         value={testPort}
                         onChange={(e) => setTestPort(e.target.value)}
                         placeholder="5432"
-                        className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono focus:ring-2 focus:ring-blue-500"
+                        title="Port number for database connection (Default: 5432)"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00]"
                         required
                       />
                     </div>
@@ -1207,10 +1242,12 @@ GEMINI_API_KEY=
                       <label className="font-bold text-slate-700">Database Name</label>
                       <input
                         type="text"
+                        tabIndex={3}
                         value={testDb}
                         onChange={(e) => setTestDb(e.target.value)}
                         placeholder="e.g. assetflow_db"
-                        className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono focus:ring-2 focus:ring-blue-500"
+                        title="Target database name catalog"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00]"
                         required
                       />
                     </div>
@@ -1218,10 +1255,12 @@ GEMINI_API_KEY=
                       <label className="font-bold text-slate-700">Database Username</label>
                       <input
                         type="text"
+                        tabIndex={4}
                         value={testUser}
                         onChange={(e) => setTestUser(e.target.value)}
                         placeholder="e.g. assetflow_user or postgres"
-                        className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono focus:ring-2 focus:ring-blue-500"
+                        title="Database role/user account credentials"
+                        className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00]"
                         required
                       />
                     </div>
@@ -1231,10 +1270,12 @@ GEMINI_API_KEY=
                     <label className="font-bold text-slate-700">Database Password</label>
                     <input
                       type="password"
+                      tabIndex={5}
                       value={testPassword}
                       onChange={(e) => setTestPassword(e.target.value)}
                       placeholder="Enter password..."
-                      className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono focus:ring-2 focus:ring-blue-500"
+                      title="Password for the database user account"
+                      className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00]"
                     />
                   </div>
                 </>
@@ -1243,10 +1284,12 @@ GEMINI_API_KEY=
                   <label className="font-bold text-slate-700">PostgreSQL Connection URI String</label>
                   <input
                     type="text"
+                    tabIndex={1}
                     value={testUri}
                     onChange={(e) => setTestUri(e.target.value)}
                     placeholder="postgres://user:password@192.168.1.50:5432/assetflow_db"
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono focus:ring-2 focus:ring-blue-500"
+                    title="Full PostgreSQL connection string URI"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl font-mono focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00]"
                     required
                   />
                 </div>
@@ -1256,9 +1299,11 @@ GEMINI_API_KEY=
                 <input
                   type="checkbox"
                   id="sslCheck"
+                  tabIndex={6}
                   checked={testSsl}
                   onChange={(e) => setTestSsl(e.target.checked)}
-                  className="w-4 h-4 text-blue-600 rounded"
+                  title="Enable SSL connection parameter"
+                  className="w-4 h-4 text-[#FF8C00] focus:ring-[#FF8C00] rounded cursor-pointer"
                 />
                 <label htmlFor="sslCheck" className="text-slate-700 font-semibold cursor-pointer">
                   Require SSL Connection (rejectUnauthorized: false)
@@ -1268,8 +1313,10 @@ GEMINI_API_KEY=
               <div className="pt-3">
                 <button
                   type="submit"
+                  tabIndex={7}
                   disabled={testing}
-                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-md flex items-center gap-2 disabled:opacity-50 transition cursor-pointer"
+                  title="Run connection handshake and latency probe test"
+                  className="px-6 py-2.5 bg-gradient-to-r from-[#FF8C00] to-[#FF4500] hover:from-[#FF8C00] hover:to-[#e03e00] text-white font-bold rounded-xl shadow-md flex items-center gap-2 disabled:opacity-50 transition cursor-pointer"
                 >
                   <Play className={`w-4 h-4 ${testing ? 'animate-spin' : ''}`} />
                   <span>{testing ? 'Testing Connection...' : 'Run Connection Test'}</span>

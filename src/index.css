@@ -1,1 +1,60 @@
 @import "tailwindcss";
+
+@theme {
+  --color-slate-300: #64748b;
+  --color-slate-400: #475569; /* Enhanced contrast: ~7:1 on white instead of washed-out #94a3b8 */
+  --color-slate-500: #334155; /* Enhanced contrast: ~10:1 on white */
+  --color-slate-600: #1e293b;
+  --color-gray-300: #64748b;
+  --color-gray-400: #475569;
+  --color-gray-500: #334155;
+  --color-gray-600: #1e293b;
+}
+
+@layer base {
+  :root {
+    --au-gold: #FFD700;
+    --au-white: #FFFFFF;
+    --au-amber-light: #FFB74D;
+    --au-orange: #FF8C00;
+    --au-flame: #FF4500;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  body {
+    color: #0f172a; /* high clarity slate-900 for excellent legibility */
+    background-color: #F8FAFC;
+    font-weight: 400;
+    letter-spacing: -0.011em;
+  }
+
+  /* Consistent, clean input field and button alignment */
+  input, select, textarea, button {
+    font-family: inherit;
+  }
+
+  /* Accessible focus ring using the subtle AU warm amber palette */
+  input:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: none;
+    border-color: #F59E0B;
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.15);
+  }
+
+  /* Ensure placeholder text is legible and not washed out */
+  ::placeholder {
+    color: #64748b !important;
+    opacity: 1;
+  }
+}
+
+/* Global subtle utilities */
+.subtle-badge {
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}

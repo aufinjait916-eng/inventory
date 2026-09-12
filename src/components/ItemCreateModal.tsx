@@ -216,12 +216,12 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
             </div>
             <div>
               <h2 className="text-lg font-bold text-slate-900">New Inventory Stock Item</h2>
-              <p className="text-xs text-slate-500">Record asset machinery or consumable stock with custom fields</p>
+              <p className="text-xs text-slate-700 font-medium">Record asset machinery or consumable stock with custom fields</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 rounded-lg transition"
+            className="p-2 text-slate-600 hover:text-slate-950 hover:bg-slate-200/60 rounded-lg transition cursor-pointer"
           >
             <X className="w-5 h-5" />
           </button>
@@ -230,20 +230,22 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
         {/* Modal Body / Form */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* Item Type Switcher */}
-          <div className="flex items-center gap-4 p-3 bg-slate-100 rounded-xl border border-slate-200">
-            <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">Classification:</span>
+          <div className="flex items-center gap-4 p-3 bg-slate-100 rounded-xl border border-slate-300">
+            <span className="text-xs font-bold text-slate-800 uppercase tracking-wider">Classification:</span>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 id="btn-select-type-asset"
+                tabIndex={1}
+                title="Select Capital Asset tracking (machinery, tools, equipment with individual serial numbers)"
                 onClick={() => {
                   setItemType('asset');
                   setQuantity('1');
                 }}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${
                   itemType === 'asset'
-                    ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
-                    : 'bg-white text-slate-700 hover:bg-slate-200'
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-2xs'
+                    : 'bg-white text-slate-800 hover:bg-slate-200 border border-slate-300'
                 }`}
               >
                 <Boxes className="w-4 h-4" />
@@ -252,13 +254,15 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
               <button
                 type="button"
                 id="btn-select-type-consumable"
+                tabIndex={2}
+                title="Select Consumable Stock tracking (lubricants, fasteners, PPE in bulk batches)"
                 onClick={() => {
                   setItemType('consumable');
                 }}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${
                   itemType === 'consumable'
-                    ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-                    : 'bg-white text-slate-700 hover:bg-slate-200'
+                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs'
+                    : 'bg-white text-slate-800 hover:bg-slate-200 border border-slate-300'
                 }`}
               >
                 <Package className="w-4 h-4" />
@@ -269,8 +273,8 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
 
           {/* Section 1: Core Fields */}
           <div className="space-y-4">
-            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
-              <Tag className="w-3.5 h-3.5 text-slate-400" />
+            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-1.5 flex items-center gap-1.5">
+              <Tag className="w-3.5 h-3.5 text-slate-600" />
               <span>Core Identification & Category</span>
             </h3>
 
@@ -282,10 +286,12 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
                 <input
                   type="text"
                   required
+                  tabIndex={3}
+                  title="Official equipment title or material item name"
                   placeholder="e.g. DMG Mori 5-Axis CNC Mill or Mobil Vactra Oil No.2"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                  className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] focus:outline-none bg-white"
                 />
               </div>
 
@@ -296,8 +302,10 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
                   </label>
                   <button
                     type="button"
+                    tabIndex={4}
+                    title="Automatically generate standard SKU/Tag sequence code"
                     onClick={handleGenerateCode}
-                    className="text-[11px] text-blue-600 hover:underline font-semibold"
+                    className="text-[11px] text-[#FF8C00] hover:text-[#FF4500] hover:underline font-semibold cursor-pointer"
                   >
                     Auto-Generate Code
                   </button>
@@ -305,10 +313,12 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
                 <input
                   type="text"
                   required
+                  tabIndex={5}
+                  title="Unique asset barcode, tag identifier, or inventory SKU"
                   placeholder="e.g. AST-CNC-501 or CON-LUB-009"
                   value={code}
                   onChange={(e) => setCode(e.target.value)}
-                  className="w-full px-3.5 py-2 text-xs font-mono border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white uppercase"
+                  className="w-full px-3.5 py-2 text-xs font-mono border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] focus:outline-none bg-white uppercase"
                 />
               </div>
             </div>
@@ -320,9 +330,11 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
                 </label>
                 <select
                   required
+                  tabIndex={6}
+                  title="Select asset or item category"
                   value={categoryId}
                   onChange={(e) => setCategoryId(Number(e.target.value))}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] focus:outline-none bg-white"
                 >
                   <option value="">-- Select Category --</option>
                   {categories.map((c) => (
@@ -338,9 +350,11 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
                   Model (Linked with Field Set)
                 </label>
                 <select
+                  tabIndex={7}
+                  title="Link item with a catalog model to inherit picture and specifications"
                   value={modelId}
                   onChange={(e) => setModelId(e.target.value ? Number(e.target.value) : '')}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] focus:outline-none bg-white"
                 >
                   <option value="">-- None / Generic Model --</option>
                   {filteredModels.map((m) => (
@@ -354,9 +368,11 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">Supplier / Vendor</label>
                 <select
+                  tabIndex={8}
+                  title="Source supplier or vendor for this item"
                   value={supplierId}
                   onChange={(e) => setSupplierId(e.target.value ? Number(e.target.value) : '')}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] focus:outline-none bg-white"
                 >
                   <option value="">-- Select Supplier --</option>
                   {vendors.map((v) => (
@@ -402,21 +418,21 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
                         />
                       </div>
                       <div className="flex-1 min-w-0 space-y-1">
-                        <p className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        <p className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
                           Model Picture Displayed
                         </p>
-                        <p className="text-[11px] text-slate-700 font-semibold truncate max-w-sm">
+                        <p className="text-[11px] text-slate-800 font-bold truncate max-w-sm">
                           {selectedModel?.name || 'Selected Model Template'}
                         </p>
-                        <p className="text-[10px] text-slate-400">
+                        <p className="text-[10px] text-slate-600 font-medium">
                           This inventory item automatically inherits the photograph and specifications configured on the model template.
                         </p>
                       </div>
                     </div>
                   ) : (
-                    <div className="p-3 bg-slate-50 border border-dashed border-slate-200 rounded-xl flex items-center gap-3 text-slate-400 text-xs">
-                      <ImageIcon className="w-5 h-5 text-slate-300 shrink-0" />
+                    <div className="p-3 bg-slate-50 border border-dashed border-slate-300 rounded-xl flex items-center gap-3 text-slate-600 text-xs font-medium">
+                      <ImageIcon className="w-5 h-5 text-slate-500 shrink-0" />
                       <span>
                         {modelId
                           ? 'The selected model does not have a picture configured in the model catalog.'
@@ -431,21 +447,23 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
 
           {/* Section 2: Units of Measurement & Quantity */}
           <div className="space-y-4">
-            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
-              <Layers className="w-3.5 h-3.5 text-slate-400" />
+            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-1.5 flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-slate-600" />
               <span>Unit of Measurement (UOM) & Stock Level</span>
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-xs font-bold text-slate-800 mb-1">
                   UOM <span className="text-red-500">*</span>
                 </label>
                 <select
                   required
+                  tabIndex={9}
+                  title="Unit of measurement (e.g. EA, Units, Litres, Meters)"
                   value={uom}
                   onChange={(e) => setUom(e.target.value as UOMType)}
-                  className="w-full px-3 py-2 text-xs font-semibold border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                  className="w-full px-3 py-2 text-xs font-semibold border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none bg-white"
                 >
                   {UOM_OPTIONS.map((u) => (
                     <option key={u.value} value={u.value}>
@@ -456,7 +474,7 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
+                <label className="block text-xs font-bold text-slate-800 mb-1">
                   Initial Quantity <span className="text-red-500">*</span>
                 </label>
                 {itemType === 'asset' ? (
@@ -465,9 +483,10 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
                       type="number"
                       readOnly
                       value="1"
-                      className="w-full px-3 py-2 text-xs font-bold font-mono border border-slate-300 rounded-lg bg-slate-100 text-slate-700 cursor-not-allowed"
+                      title="Quantity locked to 1 for unique capital asset tracking"
+                      className="w-full px-3 py-2 text-xs font-bold font-mono border border-slate-300 rounded-lg bg-slate-100 text-slate-800 cursor-not-allowed"
                     />
-                    <p className="text-[10px] text-blue-600 font-medium mt-1">
+                    <p className="text-[10px] text-amber-800 font-semibold mt-1">
                       Individual asset tracking (Qty is locked to 1)
                     </p>
                   </div>
@@ -478,12 +497,14 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
                       step="any"
                       min="0.01"
                       required
+                      tabIndex={10}
+                      title="Initial stock batch quantity on hand"
                       placeholder="e.g. 50"
                       value={quantity}
                       onChange={(e) => setQuantity(e.target.value)}
-                      className="w-full px-3 py-2 text-xs font-bold font-mono border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                      className="w-full px-3 py-2 text-xs font-bold font-mono border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none bg-white"
                     />
-                    <p className="text-[10px] text-slate-500 mt-1">
+                    <p className="text-[10px] text-slate-600 font-medium mt-1">
                       Multiple quantity batch allowed for consumables
                     </p>
                   </div>
@@ -491,12 +512,14 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Record Date</label>
+                <label className="block text-xs font-bold text-slate-800 mb-1">Record Date</label>
                 <input
                   type="date"
+                  tabIndex={11}
+                  title="Date of inventory entry or procurement"
                   value={recordDate}
                   onChange={(e) => setRecordDate(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none bg-white font-medium"
                 />
               </div>
             </div>
@@ -504,15 +527,15 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
 
           {/* Section 3: Dynamic Custom Fields from Field Set */}
           {activeFieldSet && activeFieldSet.fields && activeFieldSet.fields.length > 0 && (
-            <div className="p-4 bg-indigo-50/60 rounded-xl border border-indigo-200/80 space-y-3">
-              <div className="flex items-center justify-between border-b border-indigo-100 pb-2">
+            <div className="p-4 bg-amber-50/60 rounded-xl border border-amber-300 space-y-3">
+              <div className="flex items-center justify-between border-b border-amber-200 pb-2">
                 <div>
-                  <h4 className="text-xs font-bold text-indigo-900 uppercase tracking-wider flex items-center gap-1.5">
+                  <h4 className="text-xs font-bold text-amber-950 uppercase tracking-wider flex items-center gap-1.5">
                     <span>Model Specifications: {activeFieldSet.name}</span>
                   </h4>
-                  <p className="text-[11px] text-indigo-700">Prefilled and locked specification values inherited from Model template</p>
+                  <p className="text-[11px] text-amber-900 font-medium">Prefilled and locked specification values inherited from Model template</p>
                 </div>
-                <span className="text-[10px] bg-indigo-200 text-indigo-900 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                <span className="text-[10px] bg-amber-200 text-amber-950 font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-amber-300">
                   🔒 Read-Only Specification
                 </span>
               </div>
@@ -520,7 +543,7 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                 {activeFieldSet.fields.map((field: CustomField) => (
                   <div key={field.id} className="space-y-1">
-                    <label className="block text-xs font-bold text-slate-700">
+                    <label className="block text-xs font-bold text-slate-800">
                       {field.label} {field.isRequired && <span className="text-red-500">*</span>}
                     </label>
 
@@ -531,9 +554,9 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
                           type="checkbox"
                           disabled
                           checked={!!customFieldsData[field.name]}
-                          className="w-4 h-4 text-indigo-600 rounded bg-slate-100 border-slate-300 cursor-not-allowed"
+                          className="w-4 h-4 text-blue-600 rounded bg-slate-100 border-slate-300 cursor-not-allowed"
                         />
-                        <span className="text-xs text-slate-600 font-medium">
+                        <span className="text-xs text-slate-800 font-semibold">
                           {customFieldsData[field.name] ? 'Yes / Enabled' : 'No / Disabled'}
                         </span>
                       </div>
@@ -543,7 +566,7 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
                         readOnly
                         value={customFieldsData[field.name] !== undefined && customFieldsData[field.name] !== null ? String(customFieldsData[field.name]) : ''}
                         placeholder="Not specified in model"
-                        className="w-full px-3 py-2 text-xs font-medium border border-slate-200 rounded-lg bg-slate-100/80 text-slate-800 cursor-not-allowed"
+                        className="w-full px-3 py-2 text-xs font-medium border border-slate-300 rounded-lg bg-slate-100 text-slate-900 cursor-not-allowed"
                       />
                     )}
                   </div>
@@ -554,18 +577,20 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
 
           {/* Section 4: Initial Storage Location */}
           <div className="space-y-4">
-            <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider border-b border-slate-100 pb-1.5 flex items-center gap-1.5">
-              <Building className="w-3.5 h-3.5 text-slate-400" />
+            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider border-b border-slate-200 pb-1.5 flex items-center gap-1.5">
+              <Building className="w-3.5 h-3.5 text-slate-600" />
               <span>Initial Physical Storage Location</span>
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Branch</label>
+                <label className="block text-xs font-bold text-slate-800 mb-1">Branch</label>
                 <select
+                  tabIndex={12}
+                  title="Select storage branch campus"
                   value={selectedBranchId}
                   onChange={(e) => setSelectedBranchId(Number(e.target.value))}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none bg-white"
                 >
                   {branches.map((b) => (
                     <option key={b.id} value={b.id}>
@@ -576,11 +601,13 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Department (Location)</label>
+                <label className="block text-xs font-bold text-slate-800 mb-1">Department (Location)</label>
                 <select
+                  tabIndex={13}
+                  title="Select operational department within branch"
                   value={selectedDepartmentId}
                   onChange={(e) => setSelectedDepartmentId(e.target.value ? Number(e.target.value) : '')}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none bg-white"
                 >
                   <option value="">-- General Branch Storage --</option>
                   {departments.map((d) => (
@@ -592,11 +619,13 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">Storage Sublocation / Rack</label>
+                <label className="block text-xs font-bold text-slate-800 mb-1">Storage Sublocation / Rack</label>
                 <select
+                  tabIndex={14}
+                  title="Specific shelf, bay, room, or rack sublocation"
                   value={selectedLocationId}
                   onChange={(e) => setSelectedLocationId(e.target.value ? Number(e.target.value) : '')}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none bg-white"
                 >
                   <option value="">-- Direct Department Area --</option>
                   {locations.map((loc) => {
@@ -611,20 +640,22 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
                 </select>
               </div>
             </div>
-            <p className="text-[11px] text-slate-400 italic">
+            <p className="text-[11px] text-slate-600 font-medium italic">
               Note: Machine allocation can be recorded via the Record Stock Transfer & Allocation form.
             </p>
           </div>
 
           {/* Notes */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">Additional Operational Notes</label>
+            <label className="block text-xs font-bold text-slate-800 mb-1">Additional Operational Notes</label>
             <textarea
               rows={2}
+              tabIndex={15}
+              title="Enter any procurement, handling, or maintenance notes"
               placeholder="e.g. Initial procurement invoice details, handling precautions, or safety protocol..."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white"
+              className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none bg-white"
             />
           </div>
 
@@ -632,16 +663,20 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
           <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-3">
             <button
               type="button"
+              tabIndex={16}
+              title="Close form without saving changes"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-lg transition"
+              className="px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-slate-950 rounded-lg transition cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
+              tabIndex={17}
               disabled={submitting}
               id="btn-submit-stock-item"
-              className="px-6 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg transition shadow-md shadow-blue-600/20 disabled:opacity-50 flex items-center gap-2"
+              title="Save item to database registry and log stock transaction"
+              className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg transition shadow-2xs disabled:opacity-50 flex items-center gap-2 cursor-pointer"
             >
               {submitting ? 'Recording Item...' : 'Save & Log Stock Item'}
             </button>

@@ -632,9 +632,11 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                 </label>
                 <select
                   required
+                  tabIndex={1}
+                  title="Select destination department for received inventory"
                   value={allocDeptId}
                   onChange={(e) => setAllocDeptId(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-white"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
                 >
                   <option value="">-- Choose Receiving Department --</option>
                   {departments.map((d) => (
@@ -650,9 +652,11 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                   Storage Location / Bin <span className="text-slate-400 font-normal">(Optional)</span>
                 </label>
                 <select
+                  tabIndex={2}
+                  title="Specific shelf, bin, or room within department"
                   value={allocLocationId}
                   onChange={(e) => setAllocLocationId(e.target.value ? Number(e.target.value) : '')}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-white"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
                 >
                   <option value="">-- General Storage --</option>
                   {currentBranchLocations.map((l) => (
@@ -667,16 +671,20 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                 <label className="block font-bold text-slate-700 mb-1">Receiving Remarks / Notes</label>
                 <textarea
                   rows={2}
+                  tabIndex={3}
+                  title="Confirmation comments or physical condition upon receipt"
                   placeholder="e.g. Received in good condition, stored on shelf B2."
                   value={allocNotes}
                   onChange={(e) => setAllocNotes(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 bg-white"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
                 />
               </div>
 
               <div className="pt-2 flex justify-end gap-2 border-t border-slate-100">
                 <button
                   type="button"
+                  tabIndex={4}
+                  title="Cancel acceptance without allocating"
                   onClick={() => setAcceptingMovement(null)}
                   className="px-4 py-2 font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
                 >
@@ -684,8 +692,10 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                 </button>
                 <button
                   type="submit"
+                  tabIndex={5}
                   disabled={allocSubmitting}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl shadow-md disabled:opacity-50 cursor-pointer"
+                  title="Confirm receipt and allocate inventory to chosen department"
+                  className="px-5 py-2 bg-gradient-to-r from-[#FF8C00] to-[#FF4500] hover:from-[#FF8C00] hover:to-[#e03e00] text-white font-bold rounded-xl shadow-md disabled:opacity-50 cursor-pointer"
                 >
                   {allocSubmitting ? 'Accepting...' : 'Accept & Add to Inventory'}
                 </button>
@@ -732,10 +742,12 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                 <div className="grid grid-cols-3 gap-2 text-xs">
                   <button
                     type="button"
+                    tabIndex={1}
+                    title="Transfer inventory between departments within current branch"
                     onClick={() => setMovementType('dept_to_dept')}
                     className={`py-2 px-3 rounded-lg font-bold border transition cursor-pointer ${
                       movementType === 'dept_to_dept'
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                        ? 'bg-gradient-to-r from-[#FF8C00] to-[#FF4500] text-white border-transparent shadow-xs'
                         : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                     }`}
                   >
@@ -743,10 +755,12 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                   </button>
                   <button
                     type="button"
+                    tabIndex={2}
+                    title="Dispatch stock to another branch with manager acceptance protocol"
                     onClick={() => setMovementType('branch_to_branch')}
                     className={`py-2 px-3 rounded-lg font-bold border transition cursor-pointer ${
                       movementType === 'branch_to_branch'
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                        ? 'bg-gradient-to-r from-[#FF8C00] to-[#FF4500] text-white border-transparent shadow-xs'
                         : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                     }`}
                   >
@@ -754,10 +768,12 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                   </button>
                   <button
                     type="button"
+                    tabIndex={3}
+                    title="Directly assign equipment or tooling to a machine unit"
                     onClick={() => setMovementType('assigned_to_machine')}
                     className={`py-2 px-3 rounded-lg font-bold border transition cursor-pointer ${
                       movementType === 'assigned_to_machine'
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
+                        ? 'bg-gradient-to-r from-[#FF8C00] to-[#FF4500] text-white border-transparent shadow-xs'
                         : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                     }`}
                   >
@@ -767,25 +783,27 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
               </div>
 
               {/* Source Storage Location with Available Quantity */}
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2">
+              <div className="bg-amber-50/40 border border-amber-200/80 rounded-xl p-3.5 space-y-2">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-blue-600"></span>
+                    <span className="w-2 h-2 rounded-full bg-[#FF8C00]"></span>
                     <span>Source Storage Location & Department</span>
                     <span className="text-red-500">*</span>
                   </label>
                   {selectedItemObj && (
                     <span className="text-[11px] font-bold text-slate-600">
-                      Total in Branch: <strong className="text-blue-700">{selectedItemObj.availableQuantity || 0}</strong> {selectedItemObj.uom}
+                      Total in Branch: <strong className="text-[#FF8C00]">{selectedItemObj.availableQuantity || 0}</strong> {selectedItemObj.uom}
                     </span>
                   )}
                 </div>
 
                 {availableSourceLocations.length > 0 ? (
                   <select
+                    tabIndex={4}
+                    title="Select bin location to deduct inventory from"
                     value={fromStockLocId}
                     onChange={(e) => handleSourceLocationChange(e.target.value ? Number(e.target.value) : '')}
-                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 bg-white font-medium"
+                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white font-medium"
                     required
                   >
                     {availableSourceLocations.map((sl) => {
@@ -826,9 +844,10 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                         type="number"
                         readOnly
                         value="1"
+                        title="Fixed to 1 for capital equipment tracking"
                         className="w-full px-3 py-2 text-xs font-mono font-bold border border-slate-300 rounded-xl bg-slate-100 text-slate-700 cursor-not-allowed"
                       />
-                      <p className="text-[10px] text-blue-600 font-semibold mt-1">
+                      <p className="text-[10px] text-[#FF8C00] font-semibold mt-1">
                         Assets are moved as 1 unit per transfer
                       </p>
                     </div>
@@ -840,10 +859,12 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                         min="0.01"
                         max={maxAvailableQuantity > 0 ? maxAvailableQuantity : undefined}
                         required
+                        tabIndex={5}
+                        title={`Enter quantity to transfer (max: ${maxAvailableQuantity})`}
                         placeholder="e.g. 5"
                         value={quantity}
                         onChange={(e) => setQuantity(e.target.value)}
-                        className="w-full px-3 py-2 text-xs font-mono font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                        className="w-full px-3 py-2 text-xs font-mono font-bold border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
                       />
                       <p className="text-[10px] text-slate-500 mt-1">
                         Max transferable from chosen bin: {maxAvailableQuantity} {selectedItemObj?.uom || 'units'}
@@ -858,9 +879,11 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                       Destination Branch <span className="text-red-500">*</span>
                     </label>
                     <select
+                      tabIndex={6}
+                      title="Select receiving branch campus"
                       value={toBranchId}
                       onChange={(e) => setToBranchId(Number(e.target.value))}
-                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white font-medium"
+                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white font-medium"
                     >
                       {allBranches
                         .filter((b) => b.id !== currentBranchId)
@@ -875,9 +898,11 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">Target Department</label>
                     <select
+                      tabIndex={6}
+                      title="Target receiving department in current branch"
                       value={toDeptId}
                       onChange={(e) => setToDeptId(e.target.value ? Number(e.target.value) : '')}
-                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
                     >
                       <option value="">-- Direct Store / General --</option>
                       {departments.map((d) => (
@@ -892,12 +917,12 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
 
               {/* Notice for Branch-to-Branch */}
               {movementType === 'branch_to_branch' ? (
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-900 space-y-1">
+                <div className="p-3 bg-amber-50/50 border border-amber-200 rounded-xl text-xs text-amber-950 space-y-1">
                   <div className="font-bold flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4 text-blue-600" />
+                    <CheckCircle2 className="w-4 h-4 text-[#FF8C00]" />
                     <span>Manager Acceptance Workflow</span>
                   </div>
-                  <p className="text-blue-800 text-[11px]">
+                  <p className="text-amber-900 text-[11px]">
                     The destination branch manager will receive a transfer notification and will allocate the stock to their branch department and storage location upon physical receipt.
                   </p>
                 </div>
@@ -907,9 +932,11 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">Target Storage Sublocation</label>
                     <select
+                      tabIndex={7}
+                      title="Specific storage rack, shelf, or bin"
                       value={toLocationId}
                       onChange={(e) => setToLocationId(e.target.value ? Number(e.target.value) : '')}
-                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
                     >
                       <option value="">-- General Storage Shelf --</option>
                       {targetLocations.map((l) => (
@@ -925,9 +952,11 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                       {movementType === 'assigned_to_machine' ? 'Target Machine' : 'Target Machine (Optional)'}
                     </label>
                     <select
+                      tabIndex={8}
+                      title="Specific machine unit to assign tool/part to"
                       value={toMachineId}
                       onChange={(e) => setToMachineId(e.target.value ? Number(e.target.value) : '')}
-                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
                     >
                       <option value="">-- Not Assigned to Machine --</option>
                       {targetMachines.map((m) => (
@@ -945,16 +974,20 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                 <label className="block text-xs font-bold text-slate-700 mb-1">Transfer Purpose & Remarks</label>
                 <textarea
                   rows={2}
+                  tabIndex={9}
+                  title="Purpose of movement or Requisition reference"
                   placeholder="e.g. Line balancing request, inter-branch requisition, or relocation."
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
                 />
               </div>
 
               <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
                 <button
                   type="button"
+                  tabIndex={10}
+                  title="Cancel movement dialog"
                   onClick={() => setIsModalOpen(false)}
                   className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
                 >
@@ -962,8 +995,10 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                 </button>
                 <button
                   type="submit"
+                  tabIndex={11}
                   disabled={submitting}
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-600/20 disabled:opacity-50 cursor-pointer"
+                  title="Log and execute stock transfer in database"
+                  className="px-5 py-2 bg-gradient-to-r from-[#FF8C00] to-[#FF4500] hover:from-[#FF8C00] hover:to-[#e03e00] text-white rounded-xl text-xs font-bold shadow-md disabled:opacity-50 cursor-pointer"
                 >
                   {submitting ? 'Executing Transfer...' : 'Confirm Stock Movement'}
                 </button>

@@ -544,3 +544,73 @@ export interface PMBadgeCounts {
   inProgress: number;
   totalPending: number;
 }
+
+// ==========================================
+// DATABASE BACKUP & RESTORE TYPES (ADMIN)
+// ==========================================
+
+export interface DatabaseBackupMetadata {
+  id: string;
+  version: string;
+  format?: 'sql' | 'json';
+  createdAt: string;
+  exportedBy: {
+    id?: number;
+    name: string;
+    email: string;
+    role: string;
+  };
+  databaseName: string;
+  serverVersion?: string;
+  totalTables: number;
+  totalRecords: number;
+  tableCounts: Record<string, number>;
+  description?: string;
+}
+
+export interface DatabaseBackupPayload {
+  metadata: DatabaseBackupMetadata;
+  tables: Record<string, any[]>;
+  sqlDump?: string;
+}
+
+export interface ServerBackupSnapshotFile {
+  filename: string;
+  id: string;
+  format: 'sql' | 'json';
+  createdAt: string;
+  sizeBytes: number;
+  sizeFormatted: string;
+  totalRecords: number;
+  totalTables: number;
+  creatorName: string;
+  creatorEmail: string;
+  description?: string;
+}
+
+export interface DatabaseRestoreValidationResult {
+  valid: boolean;
+  error?: string;
+  fileFormat?: 'sql' | 'json';
+  metadata?: DatabaseBackupMetadata;
+  currentTableCounts: Record<string, number>;
+  backupTableCounts: Record<string, number>;
+  tableDiscrepancies: {
+    tableName: string;
+    description: string;
+    currentRows: number;
+    backupRows: number;
+  }[];
+  totalRecordsToRestore: number;
+  missingTables: string[];
+}
+
+export interface DatabaseRestoreResult {
+  success: boolean;
+  message: string;
+  restoredAt: string;
+  tablesRestored: string[];
+  totalRecordsRestored: number;
+  recordsPerTable: Record<string, number>;
+  durationMs: number;
+}

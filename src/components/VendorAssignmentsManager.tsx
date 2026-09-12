@@ -166,15 +166,15 @@ export const VendorAssignmentsManager: React.FC<VendorAssignmentsManagerProps> =
   return (
     <div className="space-y-6">
       {/* Informational Banner */}
-      <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200/80 rounded-2xl flex items-start gap-3.5">
-        <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
+      <div className="p-4 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 rounded-2xl flex items-start gap-3.5">
+        <div className="w-9 h-9 rounded-xl bg-gradient-to-r from-[#FF8C00] to-[#FF4500] text-white flex items-center justify-center shrink-0 shadow-sm mt-0.5">
           <ShieldCheck className="w-5 h-5" />
         </div>
         <div className="space-y-1 text-xs">
-          <h4 className="font-extrabold text-blue-950 text-sm">
+          <h4 className="font-extrabold text-amber-950 text-sm">
             Administrator Vendor Access & Visibility Control
           </h4>
-          <p className="text-blue-800 leading-relaxed">
+          <p className="text-amber-900 leading-relaxed">
             By default, vendors created by a Manager are only visible to that branch. As an
             Administrator, you can review where each vendor was registered and assign visibility to
             managers of other branches. Originating branches maintain permanent primary access.
@@ -189,19 +189,23 @@ export const VendorAssignmentsManager: React.FC<VendorAssignmentsManagerProps> =
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
+              tabIndex={1}
+              title="Search vendor by name, contact, or service type"
               placeholder="Search vendor by name, contact, or service type..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF8C00]"
             />
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
             <Filter className="w-3.5 h-3.5 text-slate-400" />
             <select
+              tabIndex={2}
+              title="Filter vendors by branch of creation"
               value={selectedOriginBranch}
               onChange={(e) => setSelectedOriginBranch(e.target.value)}
-              className="text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="text-xs bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#FF8C00]"
             >
               <option value="all">All Origin Branches</option>
               <option value="hq">Headquarters / Global</option>

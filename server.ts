@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import * as dotenv from 'dotenv';
 import { Client } from 'pg';
@@ -1403,13 +1404,32 @@ async function startServer() {
         const threshold = m.minThreshold !== undefined && m.minThreshold !== null ? m.minThreshold : 5;
         const isLow = modelItems.length > 0 && availQty <= threshold;
 
+        // Auto-resolve field set: first by explicit m.fieldSetId, second by attached field set of category, third virtual category fields
+        let resolvedFs = m.fieldSetId ? fsMap.get(m.fieldSetId) : null;
+        if (!resolvedFs && m.categoryId) {
+          resolvedFs = enrichedFieldSets.find(fs => fs.categoryId === m.categoryId) || null;
+        }
+        if (!resolvedFs && m.categoryId) {
+          const catFields = allFields.filter(f => f.categoryId === m.categoryId);
+          if (catFields.length > 0) {
+            resolvedFs = {
+              id: -m.categoryId,
+              categoryId: m.categoryId,
+              name: `${catMap.get(m.categoryId)?.name || 'Category'} Fields`,
+              description: 'Custom fields automatically associated with category',
+              fields: catFields,
+              createdAt: new Date(),
+            };
+          }
+        }
+
         return {
           ...m,
           minThreshold: threshold,
           totalStockQuantity: totalQty,
           availableStockQuantity: availQty,
           isLowStock: isLow,
-          fieldSet: m.fieldSetId ? fsMap.get(m.fieldSetId) : null,
+          fieldSet: resolvedFs,
           category: catMap.get(m.categoryId),
         };
       });
@@ -1428,9 +1448,18 @@ async function startServer() {
         return res.status(400).json({ error: 'Category, name, and model number are required' });
       }
 
+      // Automatically find field set attached to category if not explicitly provided
+      let resolvedFieldSetId = fieldSetId ? parseInt(fieldSetId) : null;
+      if (!resolvedFieldSetId && categoryId) {
+        const matchingFs = await db.select().from(fieldSets).where(eq(fieldSets.categoryId, parseInt(categoryId))).limit(1);
+        if (matchingFs.length > 0) {
+          resolvedFieldSetId = matchingFs[0].id;
+        }
+      }
+
       const [created] = await db.insert(models).values({
         categoryId: parseInt(categoryId),
-        fieldSetId: fieldSetId ? parseInt(fieldSetId) : null,
+        fieldSetId: resolvedFieldSetId,
         name,
         modelNumber,
         minThreshold: minThreshold !== undefined && minThreshold !== null ? parseFloat(minThreshold) : 5,
@@ -1452,10 +1481,20 @@ async function startServer() {
     try {
       const id = parseInt(req.params.id);
       const { categoryId, fieldSetId, name, modelNumber, minThreshold, manufacturer, description, imageUrl, customFieldsData } = req.body;
+
+      // Automatically find field set attached to category if fieldSetId is null/empty
+      let resolvedFieldSetId = fieldSetId !== undefined ? (fieldSetId ? parseInt(fieldSetId) : null) : undefined;
+      if (resolvedFieldSetId === null && categoryId) {
+        const matchingFs = await db.select().from(fieldSets).where(eq(fieldSets.categoryId, parseInt(categoryId))).limit(1);
+        if (matchingFs.length > 0) {
+          resolvedFieldSetId = matchingFs[0].id;
+        }
+      }
+
       const [updated] = await db.update(models)
         .set({
           categoryId: categoryId ? parseInt(categoryId) : undefined,
-          fieldSetId: fieldSetId !== undefined ? (fieldSetId ? parseInt(fieldSetId) : null) : undefined,
+          fieldSetId: resolvedFieldSetId,
           name: name || undefined,
           modelNumber: modelNumber || undefined,
           minThreshold: minThreshold !== undefined && minThreshold !== null ? parseFloat(minThreshold) : undefined,
@@ -4599,9 +4638,23 @@ async function startServer() {
         });
       }
 
-      // Truncate selected tables with restart identity and cascade
-      const quotedTableNames = validTables.map((t) => `"${t}"`).join(', ');
-      await pool.query(`TRUNCATE TABLE ${quotedTableNames} RESTART IDENTITY CASCADE;`);
+      // Clear selected tables in reverse dependency order
+      for (const t of validTables) {
+        try {
+          await pool.query(`TRUNCATE TABLE "${t}" RESTART IDENTITY CASCADE;`);
+        } catch (_) {
+          try {
+            await pool.query(`DELETE FROM "${t}";`);
+            const seqRes = await pool.query(`SELECT pg_get_serial_sequence($1, 'id');`, [t]);
+            const seqName = seqRes.rows[0]?.pg_get_serial_sequence;
+            if (seqName) {
+              await pool.query(`SELECT setval($1, 1, false);`, [seqName]);
+            }
+          } catch (delErr) {
+            console.warn(`Could not clear table ${t}:`, delErr);
+          }
+        }
+      }
 
       // Safety preservation: If 'users' table was truncated, immediately re-create active Admin account
       if (validTables.includes('users')) {
@@ -4658,6 +4711,788 @@ async function startServer() {
     } catch (error: any) {
       console.error('Error resetting database tables:', error);
       res.status(500).json({ error: error.message || 'Failed to reset selected database tables' });
+    }
+  });
+
+  // ====================================================
+  // DATABASE BACKUP & RESTORE UTILITY (ADMINISTRATOR ONLY)
+  // ====================================================
+
+  const BACKUPS_DIR = path.join(process.cwd(), 'backups');
+  if (!fs.existsSync(BACKUPS_DIR)) {
+    try {
+      fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+    } catch (e) {
+      console.warn('Could not create backups directory:', e);
+    }
+  }
+
+  const TABLE_OBJECTS: Record<string, any> = {
+    branches,
+    departments,
+    locations,
+    machines,
+    employees,
+    employee_departments: employeeDepartments,
+    categories,
+    user_category_permissions: userCategoryPermissions,
+    custom_fields: customFields,
+    field_sets: fieldSets,
+    field_set_items: fieldSetItems,
+    models,
+    vendors,
+    vendor_branch_assignments: vendorBranchAssignments,
+    request_reasons: requestReasons,
+    inventory_items: inventoryItems,
+    stock_locations: stockLocations,
+    employee_requests: employeeRequests,
+    inventory_movements: inventoryMovements,
+    vendor_repairs: vendorRepairs,
+    entry_logs: entryLogs,
+    pm_plans: pmPlans,
+    pm_schedules: pmSchedules,
+    pm_work_orders: pmWorkOrders,
+    users,
+  };
+
+  const RESTORE_ORDER = [
+    'branches',
+    'departments',
+    'locations',
+    'machines',
+    'employees',
+    'employee_departments',
+    'categories',
+    'user_category_permissions',
+    'custom_fields',
+    'field_sets',
+    'field_set_items',
+    'models',
+    'vendors',
+    'vendor_branch_assignments',
+    'request_reasons',
+    'inventory_items',
+    'stock_locations',
+    'employee_requests',
+    'inventory_movements',
+    'vendor_repairs',
+    'entry_logs',
+    'pm_plans',
+    'pm_schedules',
+    'pm_work_orders',
+    'users',
+  ];
+
+  function formatSqlLiteral(val: any): string {
+    if (val === null || val === undefined) return 'NULL';
+    if (typeof val === 'boolean') return val ? 'TRUE' : 'FALSE';
+    if (typeof val === 'number') return Number.isFinite(val) ? String(val) : 'NULL';
+    if (val instanceof Date) return `'${val.toISOString()}'::timestamptz`;
+    if (typeof val === 'object') {
+      const jsonStr = JSON.stringify(val);
+      return `'${jsonStr.replace(/'/g, "''")}'::jsonb`;
+    }
+    const str = String(val);
+    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(str)) {
+      return `'${str.replace(/'/g, "''")}'::timestamptz`;
+    }
+    return `'${str.replace(/'/g, "''")}'`;
+  }
+
+  function generatePostgresSqlDump(
+    tablesData: Record<string, any[]>,
+    metadata: any
+  ): string {
+    const lines: string[] = [];
+
+    lines.push(`-- ==========================================================`);
+    lines.push(`-- AssetFlow PostgreSQL Database Dump`);
+    lines.push(`-- Database: ${metadata.databaseName}`);
+    lines.push(`-- Generated: ${metadata.createdAt}`);
+    lines.push(`-- Exporter: ${metadata.exportedBy?.name || 'Administrator'} (${metadata.exportedBy?.email || ''})`);
+    lines.push(`-- Total Tables: ${metadata.totalTables}`);
+    lines.push(`-- Total Records: ${metadata.totalRecords}`);
+    lines.push(`-- Format: Standard PostgreSQL SQL Dump (psql / DDL compatible)`);
+    lines.push(`-- ==========================================================`);
+    lines.push(`-- METADATA: ${JSON.stringify(metadata)}`);
+    lines.push(`-- ==========================================================\n`);
+
+    lines.push(`SET statement_timeout = 0;`);
+    lines.push(`SET client_encoding = 'UTF8';`);
+    lines.push(`SET standard_conforming_strings = on;`);
+    lines.push(`SET check_function_bodies = false;`);
+    lines.push(`SET client_min_messages = warning;\n`);
+
+    lines.push(`BEGIN;\n`);
+
+    lines.push(`-- Step 1: Clear existing tables in reverse dependency order`);
+    const reverseOrder = [...RESTORE_ORDER].reverse();
+    for (const table of reverseOrder) {
+      lines.push(`DELETE FROM "${table}";`);
+    }
+    lines.push('');
+
+    lines.push(`-- Step 2: Insert table data in relational dependency order`);
+    for (const table of RESTORE_ORDER) {
+      const rows = tablesData[table];
+      const count = Array.isArray(rows) ? rows.length : 0;
+      lines.push(`-- Table: "${table}" (${count} records)`);
+
+      if (Array.isArray(rows) && rows.length > 0) {
+        const columns = Object.keys(rows[0]);
+        const quotedCols = columns.map((col) => `"${col}"`).join(', ');
+
+        const batchSize = 50;
+        for (let i = 0; i < rows.length; i += batchSize) {
+          const batch = rows.slice(i, i + batchSize);
+          const valueTuples = batch.map((row) => {
+            const vals = columns.map((col) => formatSqlLiteral(row[col]));
+            return `  (${vals.join(', ')})`;
+          });
+
+          lines.push(`INSERT INTO "${table}" (${quotedCols}) VALUES\n${valueTuples.join(',\n')};`);
+        }
+
+        // Sequence synchronization (safely checks if serial sequence exists for 'id')
+        lines.push(`SELECT CASE WHEN pg_get_serial_sequence('${table}', 'id') IS NOT NULL THEN setval(pg_get_serial_sequence('${table}', 'id'), COALESCE((SELECT MAX(id) FROM "${table}"), 0) + 1, false) ELSE NULL END;\n`);
+      } else {
+        lines.push(`-- (0 records)\n`);
+      }
+    }
+
+    lines.push(`COMMIT;\n`);
+    lines.push(`-- End of PostgreSQL Database Dump\n`);
+
+    return lines.join('\n');
+  }
+
+  // 1. Export & Download Full Database Backup (.sql or .json)
+  app.get('/api/database/backup', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      if (req.user?.role !== 'admin') {
+        return res.status(403).json({ error: 'Access Denied: Only Administrator role can export database backups.' });
+      }
+
+      const requestedFormat = (req.query.format === 'json' ? 'json' : 'sql');
+      const description = typeof req.query.description === 'string' ? req.query.description : 'Manual local database backup';
+      const now = new Date();
+      const dateStr = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const backupId = `backup_${Date.now()}`;
+      const filename = `assetflow_db_backup_${dateStr}.${requestedFormat}`;
+
+      // Query raw database records directly via pg pool so that column names exactly match the PostgreSQL schema
+      const tablesData: Record<string, any[]> = {};
+      const tableCounts: Record<string, number> = {};
+      let totalRecords = 0;
+
+      for (const tableName of SCHEMA_TABLES) {
+        try {
+          const pgRes = await pool.query(`SELECT * FROM "${tableName}";`);
+          tablesData[tableName] = pgRes.rows;
+          tableCounts[tableName] = pgRes.rows.length;
+          totalRecords += pgRes.rows.length;
+        } catch (tblErr) {
+          tablesData[tableName] = [];
+          tableCounts[tableName] = 0;
+        }
+      }
+
+      const metadata = {
+        id: backupId,
+        version: '1.0',
+        format: requestedFormat,
+        createdAt: now.toISOString(),
+        exportedBy: {
+          id: req.user.id,
+          name: req.user.name,
+          email: req.user.email,
+          role: req.user.role,
+        },
+        databaseName: process.env.SQL_DB_NAME || process.env.PGDATABASE || 'assetflow_db',
+        totalTables: SCHEMA_TABLES.length,
+        totalRecords,
+        tableCounts,
+        description,
+      };
+
+      if (requestedFormat === 'sql') {
+        const sqlDump = generatePostgresSqlDump(tablesData, metadata);
+
+        // Save local server snapshot in ./backups/
+        try {
+          if (!fs.existsSync(BACKUPS_DIR)) {
+            fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+          }
+          fs.writeFileSync(path.join(BACKUPS_DIR, filename), sqlDump, 'utf-8');
+        } catch (fsErr) {
+          console.warn('Could not save snapshot file to local backups directory:', fsErr);
+        }
+
+        await logEntry(
+          req,
+          'BACKUP_DATABASE',
+          'SYSTEM_DATABASE',
+          backupId,
+          `Admin ${req.user.name} created full PostgreSQL SQL dump (${totalRecords} records across ${SCHEMA_TABLES.length} tables). File: ${filename}`
+        );
+
+        if (req.query.download === 'true') {
+          res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+          res.setHeader('Content-Type', 'application/sql');
+          return res.send(sqlDump);
+        }
+
+        return res.json({
+          success: true,
+          filename,
+          format: 'sql',
+          metadata,
+          sqlDump,
+        });
+      }
+
+      const backupPayload = {
+        metadata,
+        tables: tablesData,
+      };
+
+      // Save a local server snapshot in ./backups/
+      try {
+        if (!fs.existsSync(BACKUPS_DIR)) {
+          fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+        }
+        fs.writeFileSync(path.join(BACKUPS_DIR, filename), JSON.stringify(backupPayload, null, 2), 'utf-8');
+      } catch (fsErr) {
+        console.warn('Could not save snapshot file to local backups directory:', fsErr);
+      }
+
+      // Log action
+      await logEntry(
+        req,
+        'BACKUP_DATABASE',
+        'SYSTEM_DATABASE',
+        backupId,
+        `Admin ${req.user.name} created full database backup (${totalRecords} records across ${SCHEMA_TABLES.length} tables). File: ${filename}`
+      );
+
+      if (req.query.download === 'true') {
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.setHeader('Content-Type', 'application/json');
+        return res.send(JSON.stringify(backupPayload, null, 2));
+      }
+
+      res.json({
+        success: true,
+        filename,
+        format: 'json',
+        metadata,
+        backup: backupPayload,
+      });
+    } catch (error: any) {
+      console.error('Error creating database backup:', error);
+      res.status(500).json({ error: error.message || 'Failed to create database backup' });
+    }
+  });
+
+  // 2. List Local Server Snapshots (.sql and .json)
+  app.get('/api/database/snapshots', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      if (req.user?.role !== 'admin') {
+        return res.status(403).json({ error: 'Access Denied: Administrator role required.' });
+      }
+
+      if (!fs.existsSync(BACKUPS_DIR)) {
+        return res.json([]);
+      }
+
+      const files = fs.readdirSync(BACKUPS_DIR).filter((f) => f.endsWith('.json') || f.endsWith('.sql'));
+      const snapshots = [];
+
+      for (const file of files) {
+        try {
+          const filePath = path.join(BACKUPS_DIR, file);
+          const stat = fs.statSync(filePath);
+          const sizeBytes = stat.size;
+          const sizeFormatted = sizeBytes < 1024 * 1024
+            ? `${(sizeBytes / 1024).toFixed(1)} KB`
+            : `${(sizeBytes / (1024 * 1024)).toFixed(2)} MB`;
+
+          if (file.endsWith('.sql')) {
+            const content = fs.readFileSync(filePath, 'utf-8');
+            let meta: any = null;
+            const metaMatch = content.match(/-- METADATA: (\{.*\})/);
+            if (metaMatch) {
+              try {
+                meta = JSON.parse(metaMatch[1]);
+              } catch (_) {}
+            }
+
+            snapshots.push({
+              filename: file,
+              id: meta?.id || file,
+              format: 'sql',
+              createdAt: meta?.createdAt || stat.mtime.toISOString(),
+              sizeBytes,
+              sizeFormatted,
+              totalRecords: meta?.totalRecords ?? 0,
+              totalTables: meta?.totalTables ?? SCHEMA_TABLES.length,
+              creatorName: meta?.exportedBy?.name || 'System Administrator',
+              creatorEmail: meta?.exportedBy?.email || 'admin@company.local',
+              description: meta?.description || 'PostgreSQL SQL Dump',
+            });
+          } else {
+            const content = fs.readFileSync(filePath, 'utf-8');
+            const parsed = JSON.parse(content);
+            snapshots.push({
+              filename: file,
+              id: parsed.metadata?.id || file,
+              format: 'json',
+              createdAt: parsed.metadata?.createdAt || stat.mtime.toISOString(),
+              sizeBytes,
+              sizeFormatted,
+              totalRecords: parsed.metadata?.totalRecords ?? 0,
+              totalTables: parsed.metadata?.totalTables ?? Object.keys(parsed.tables || {}).length,
+              creatorName: parsed.metadata?.exportedBy?.name || 'System Administrator',
+              creatorEmail: parsed.metadata?.exportedBy?.email || 'admin@company.local',
+              description: parsed.metadata?.description,
+            });
+          }
+        } catch (readErr) {
+          console.warn(`Error reading snapshot ${file}:`, readErr);
+        }
+      }
+
+      snapshots.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      res.json(snapshots);
+    } catch (error: any) {
+      console.error('Error listing snapshots:', error);
+      res.status(500).json({ error: error.message || 'Failed to list snapshots' });
+    }
+  });
+
+  // 3. Download Local Server Snapshot
+  app.get('/api/database/snapshots/:filename/download', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      if (req.user?.role !== 'admin') {
+        return res.status(403).json({ error: 'Access Denied: Administrator role required.' });
+      }
+
+      const filename = path.basename(req.params.filename);
+      const filePath = path.join(BACKUPS_DIR, filename);
+
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'Snapshot file not found' });
+      }
+
+      res.download(filePath, filename);
+    } catch (error: any) {
+      console.error('Error downloading snapshot:', error);
+      res.status(500).json({ error: error.message || 'Failed to download snapshot' });
+    }
+  });
+
+  // 4. Delete Local Server Snapshot
+  app.delete('/api/database/snapshots/:filename', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      if (req.user?.role !== 'admin') {
+        return res.status(403).json({ error: 'Access Denied: Administrator role required.' });
+      }
+
+      const filename = path.basename(req.params.filename);
+      const filePath = path.join(BACKUPS_DIR, filename);
+
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+
+      await logEntry(req, 'DELETE_BACKUP_SNAPSHOT', 'SYSTEM_DATABASE', filename, `Deleted backup snapshot ${filename}`);
+      res.json({ success: true, message: `Snapshot ${filename} deleted successfully` });
+    } catch (error: any) {
+      console.error('Error deleting snapshot:', error);
+      res.status(500).json({ error: error.message || 'Failed to delete snapshot' });
+    }
+  });
+
+  // 5. Pre-Restore Validation & Comparison Inspection (.sql or .json)
+  app.post('/api/database/restore/validate', authMiddleware, async (req: AuthRequest, res) => {
+    try {
+      if (req.user?.role !== 'admin') {
+        return res.status(403).json({ error: 'Access Denied: Administrator role required.' });
+      }
+
+      let payload = req.body?.backup;
+      let rawSqlScript: string | null = req.body?.sqlDump || null;
+      let isSqlFormat = false;
+
+      if (req.body?.snapshotFilename) {
+        const snapshotPath = path.join(BACKUPS_DIR, path.basename(req.body.snapshotFilename));
+        if (fs.existsSync(snapshotPath)) {
+          if (req.body.snapshotFilename.endsWith('.sql')) {
+            rawSqlScript = fs.readFileSync(snapshotPath, 'utf-8');
+            isSqlFormat = true;
+          } else {
+            payload = JSON.parse(fs.readFileSync(snapshotPath, 'utf-8'));
+          }
+        }
+      } else if (rawSqlScript) {
+        isSqlFormat = true;
+      }
+
+      const currentTableCounts: Record<string, number> = {};
+      const tableDescriptions: Record<string, string> = {
+        branches: 'Branch Facilities & Warehouses',
+        departments: 'Departments & Production Areas',
+        locations: 'Storage Locations & Racks',
+        machines: 'Machinery & Equipment',
+        employees: 'Authorized Personnel',
+        employee_departments: 'Employee Department Links',
+        categories: 'Item & Asset Categories',
+        user_category_permissions: 'Category Access Permissions',
+        custom_fields: 'Dynamic Custom Fields',
+        field_sets: 'Field Set Groupings',
+        field_set_items: 'Field Set Associations',
+        models: 'Predefined Asset Models',
+        vendors: 'Vendors & Suppliers',
+        vendor_branch_assignments: 'Vendor Branch Visibility Rules',
+        request_reasons: 'Pre-fed Requisition Reasons',
+        inventory_items: 'Assets & Consumables Catalog',
+        stock_locations: 'Stock Location Allocations',
+        employee_requests: 'Department Issuances & Requisitions',
+        inventory_movements: 'Stock Transfers & Tracking History',
+        vendor_repairs: 'Vendor Repairs & Engagements',
+        entry_logs: 'Immutable Audit Trail Logs',
+        pm_plans: 'PM Master Plans & Checklist Templates',
+        pm_schedules: 'PM Recurring Schedules',
+        pm_work_orders: 'PM Work Orders & Executions',
+        users: 'System Users & Login Accounts',
+      };
+
+      for (const tableName of SCHEMA_TABLES) {
+        const tableObj = TABLE_OBJECTS[tableName];
+        if (tableObj) {
+          try {
+            const countRes = await db.select({ count: sql<number>`count(*)` }).from(tableObj);
+            currentTableCounts[tableName] = Number(countRes[0]?.count || 0);
+          } catch (_) {
+            currentTableCounts[tableName] = 0;
+          }
+        }
+      }
+
+      // Handle PostgreSQL SQL format validation
+      if (isSqlFormat && rawSqlScript) {
+        let meta: any = null;
+        const metaMatch = rawSqlScript.match(/-- METADATA: (\{.*\})/);
+        if (metaMatch) {
+          try {
+            meta = JSON.parse(metaMatch[1]);
+          } catch (_) {}
+        }
+
+        const backupTableCounts: Record<string, number> = meta?.tableCounts || {};
+        let totalRecordsToRestore = 0;
+
+        if (!meta?.tableCounts) {
+          for (const tableName of SCHEMA_TABLES) {
+            const regex = new RegExp(`INSERT INTO "${tableName}"`, 'g');
+            const matches = rawSqlScript.match(regex);
+            backupTableCounts[tableName] = matches ? matches.length : 0;
+          }
+        }
+
+        const tableDiscrepancies = [];
+        for (const tableName of SCHEMA_TABLES) {
+          const count = backupTableCounts[tableName] || 0;
+          totalRecordsToRestore += count;
+          tableDiscrepancies.push({
+            tableName,
+            description: tableDescriptions[tableName] || tableName,
+            currentRows: currentTableCounts[tableName] || 0,
+            backupRows: count,
+          });
+        }
+
+        return res.json({
+          valid: true,
+          fileFormat: 'sql',
+          metadata: meta || {
+            id: 'sql_dump',
+            databaseName: process.env.SQL_DB_NAME || 'assetflow_db',
+            createdAt: new Date().toISOString(),
+            totalTables: SCHEMA_TABLES.length,
+            totalRecords: totalRecordsToRestore,
+            description: 'PostgreSQL SQL Data Dump',
+          },
+          currentTableCounts,
+          backupTableCounts,
+          tableDiscrepancies,
+          totalRecordsToRestore,
+          missingTables: [],
+        });
+      }
+
+      // Handle JSON format validation
+      if (!payload || typeof payload !== 'object') {
+        return res.status(400).json({ valid: false, error: 'Invalid backup format. Expected a valid JSON object or SQL script.' });
+      }
+
+      if (!payload.tables || typeof payload.tables !== 'object') {
+        return res.status(400).json({ valid: false, error: 'Invalid backup file: "tables" object is missing.' });
+      }
+
+      const backupTableCounts: Record<string, number> = {};
+      const tableDiscrepancies = [];
+      let totalRecordsToRestore = 0;
+
+      for (const tableName of SCHEMA_TABLES) {
+        const rows = payload.tables[tableName];
+        const count = Array.isArray(rows) ? rows.length : 0;
+        backupTableCounts[tableName] = count;
+        totalRecordsToRestore += count;
+
+        tableDiscrepancies.push({
+          tableName,
+          description: tableDescriptions[tableName] || tableName,
+          currentRows: currentTableCounts[tableName] || 0,
+          backupRows: count,
+        });
+      }
+
+      const missingTables = SCHEMA_TABLES.filter((t) => !Array.isArray(payload.tables[t]));
+
+      res.json({
+        valid: true,
+        fileFormat: 'json',
+        metadata: payload.metadata,
+        currentTableCounts,
+        backupTableCounts,
+        tableDiscrepancies,
+        totalRecordsToRestore,
+        missingTables,
+      });
+    } catch (error: any) {
+      console.error('Error validating backup:', error);
+      res.status(500).json({ valid: false, error: error.message || 'Validation failed' });
+    }
+  });
+
+  // 6. Execute Full Database Restoration (.sql or .json)
+  app.post('/api/database/restore', authMiddleware, async (req: AuthRequest, res) => {
+    const startTime = Date.now();
+    try {
+      if (req.user?.role !== 'admin') {
+        return res.status(403).json({ error: 'Access Denied: Only Administrator role has authorization to restore the database.' });
+      }
+
+      const { backup, snapshotFilename, confirmationKeyword, sqlDump } = req.body;
+
+      if ((confirmationKeyword || '').trim().toUpperCase() !== 'RESTORE') {
+        return res.status(400).json({
+          error: 'Restoration aborted: You must type "RESTORE" exactly to confirm database replacement.',
+        });
+      }
+
+      let payload = backup;
+      let rawSqlScript: string | null = sqlDump || null;
+      let isSqlFormat = false;
+
+      if (snapshotFilename) {
+        const snapshotPath = path.join(BACKUPS_DIR, path.basename(snapshotFilename));
+        if (fs.existsSync(snapshotPath)) {
+          if (snapshotFilename.endsWith('.sql')) {
+            rawSqlScript = fs.readFileSync(snapshotPath, 'utf-8');
+            isSqlFormat = true;
+          } else {
+            payload = JSON.parse(fs.readFileSync(snapshotPath, 'utf-8'));
+          }
+        } else {
+          return res.status(404).json({ error: `Snapshot file ${snapshotFilename} not found on server.` });
+        }
+      } else if (rawSqlScript) {
+        isSqlFormat = true;
+      }
+
+      // RESTORE MODE A: Native PostgreSQL SQL Script Execution
+      if (isSqlFormat && rawSqlScript) {
+        // Execute the entire SQL script
+        await pool.query(rawSqlScript);
+
+        // Safety Check: Verify that an active Administrator user exists in the database
+        const existingAdmins = await db.select().from(users).where(eq(users.role, 'admin'));
+        if (existingAdmins.length === 0) {
+          const envAdminEmail = (process.env.ADMIN_EMAIL || process.env.ADMIN_USER || 'admin@company.local').trim().toLowerCase();
+          const envAdminPass = (process.env.ADMIN_PASSWORD || 'admin123').trim();
+          const currentAdminName = req.user?.name || 'System Administrator';
+          const currentAdminEmail = req.user?.email || envAdminEmail;
+          const currentAdminUid = req.user?.uid || `admin_${Date.now()}`;
+          const adminHash = hashPassword(envAdminPass);
+
+          await db.insert(users).values({
+            uid: currentAdminUid,
+            name: currentAdminName,
+            email: currentAdminEmail,
+            password: adminHash,
+            role: 'admin',
+            isActive: true,
+          });
+        }
+
+        // Gather restored counts per table
+        const recordsPerTable: Record<string, number> = {};
+        let totalRecordsRestored = 0;
+        for (const tableName of SCHEMA_TABLES) {
+          const tableObj = TABLE_OBJECTS[tableName];
+          if (tableObj) {
+            try {
+              const countRes = await db.select({ count: sql<number>`count(*)` }).from(tableObj);
+              const count = Number(countRes[0]?.count || 0);
+              recordsPerTable[tableName] = count;
+              totalRecordsRestored += count;
+            } catch (_) {
+              recordsPerTable[tableName] = 0;
+            }
+          }
+        }
+
+        const durationMs = Date.now() - startTime;
+        await logEntry(
+          req,
+          'RESTORE_DATABASE',
+          'SYSTEM_DATABASE',
+          totalRecordsRestored,
+          `Admin ${req.user.name} restored database successfully from PostgreSQL SQL dump (${totalRecordsRestored} records in ${durationMs}ms)`
+        );
+
+        return res.json({
+          success: true,
+          fileFormat: 'sql',
+          message: `PostgreSQL database successfully restored from SQL script! Restored ${totalRecordsRestored} records across tables.`,
+          restoredAt: new Date().toISOString(),
+          tablesRestored: SCHEMA_TABLES,
+          totalRecordsRestored,
+          recordsPerTable,
+          durationMs,
+        });
+      }
+
+      // RESTORE MODE B: JSON Table-by-Table Insertion
+      if (!payload || !payload.tables || typeof payload.tables !== 'object') {
+        return res.status(400).json({ error: 'Invalid backup payload. Expected a valid backup object with "tables" or a SQL script.' });
+      }
+
+      // 1. Clear all tables in reverse dependency order
+      const reverseOrder = [...RESTORE_ORDER].reverse();
+      for (const tableName of reverseOrder) {
+        try {
+          await pool.query(`DELETE FROM "${tableName}";`);
+        } catch (delErr) {
+          console.warn(`Could not clear table ${tableName} with DELETE:`, delErr);
+        }
+      }
+
+      // 2. Insert records in strict dependency order
+      const recordsPerTable: Record<string, number> = {};
+      const tablesRestored: string[] = [];
+      let totalRecordsRestored = 0;
+
+      for (const tableName of RESTORE_ORDER) {
+        const rows = payload.tables[tableName];
+        const tableObj = TABLE_OBJECTS[tableName];
+
+        if (tableObj && Array.isArray(rows) && rows.length > 0) {
+          const chunkSize = 50;
+          for (let i = 0; i < rows.length; i += chunkSize) {
+            const chunk = rows.slice(i, i + chunkSize);
+            const prepared = chunk.map((r: any) => {
+              const copy: any = {};
+              for (const [k, v] of Object.entries(r)) {
+                let val = v;
+                if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(v)) {
+                  val = new Date(v);
+                }
+                copy[k] = val;
+              }
+              // Map snake_case database column names to Drizzle property keys if needed
+              for (const [propName, colObj] of Object.entries(tableObj)) {
+                if (colObj && typeof colObj === 'object' && 'name' in colObj) {
+                  const sqlColName = (colObj as any).name;
+                  if (copy[sqlColName] !== undefined && copy[propName] === undefined) {
+                    copy[propName] = copy[sqlColName];
+                  }
+                }
+              }
+              return copy;
+            });
+            await db.insert(tableObj).values(prepared);
+          }
+
+          recordsPerTable[tableName] = rows.length;
+          tablesRestored.push(tableName);
+          totalRecordsRestored += rows.length;
+        } else {
+          recordsPerTable[tableName] = 0;
+        }
+
+        // Synchronize sequence identity to prevent ID collision
+        try {
+          const seqRes = await pool.query(`SELECT pg_get_serial_sequence($1, 'id');`, [tableName]);
+          const seqName = seqRes.rows[0]?.pg_get_serial_sequence;
+          if (seqName) {
+            await pool.query(
+              `SELECT setval($1, COALESCE((SELECT MAX(id) FROM "${tableName}"), 0) + 1, false);`,
+              [seqName]
+            );
+          }
+        } catch (seqErr) {
+          // ignore if no serial id sequence
+        }
+      }
+
+      // 3. Safety Check: Verify that an active Administrator user exists in the database
+      const existingAdmins = await db.select().from(users).where(eq(users.role, 'admin'));
+      if (existingAdmins.length === 0) {
+        const envAdminEmail = (process.env.ADMIN_EMAIL || process.env.ADMIN_USER || 'admin@company.local').trim().toLowerCase();
+        const envAdminPass = (process.env.ADMIN_PASSWORD || 'admin123').trim();
+        const currentAdminName = req.user?.name || 'System Administrator';
+        const currentAdminEmail = req.user?.email || envAdminEmail;
+        const currentAdminUid = req.user?.uid || `admin_${Date.now()}`;
+        const adminHash = hashPassword(envAdminPass);
+
+        await db.insert(users).values({
+          uid: currentAdminUid,
+          name: currentAdminName,
+          email: currentAdminEmail,
+          password: adminHash,
+          role: 'admin',
+          isActive: true,
+        });
+        recordsPerTable['users'] = (recordsPerTable['users'] || 0) + 1;
+        totalRecordsRestored += 1;
+      }
+
+      // 4. Log the restore action
+      const durationMs = Date.now() - startTime;
+      await logEntry(
+        req,
+        'RESTORE_DATABASE',
+        'SYSTEM_DATABASE',
+        totalRecordsRestored,
+        `Admin ${req.user.name} restored database successfully (${totalRecordsRestored} records across ${tablesRestored.length} tables in ${durationMs}ms)`
+      );
+
+      res.json({
+        success: true,
+        fileFormat: 'json',
+        message: `Database successfully restored! Populated ${totalRecordsRestored} records across ${tablesRestored.length} tables.`,
+        restoredAt: new Date().toISOString(),
+        tablesRestored,
+        totalRecordsRestored,
+        recordsPerTable,
+        durationMs,
+      });
+    } catch (error: any) {
+      console.error('Error restoring database:', error);
+      res.status(500).json({ error: error.message || 'Failed to restore database' });
     }
   });
 

@@ -374,13 +374,30 @@ export const CategoriesAndFieldsView: React.FC = () => {
   // 4. Model Handlers (no manufacturer)
   const handleOpenCreateModel = () => {
     setEditingModelId(null);
-    setModelCategoryId(categories[0]?.id || '');
-    setModelFieldSetId('');
+    const initialCatId = categories[0]?.id || '';
+    setModelCategoryId(initialCatId);
+
+    // Automatically detect and link the field set attached to this initial category
+    const catFieldSets = initialCatId ? fieldSets.filter((fs) => fs.categoryId === Number(initialCatId)) : [];
+    const attachedFs = catFieldSets[0];
+    const initialFsId = attachedFs ? attachedFs.id : '';
+    setModelFieldSetId(initialFsId);
+
+    // Automatically load all associated custom fields for this category / attached field set
+    const fieldsToUse: CustomField[] = (attachedFs && attachedFs.fields && attachedFs.fields.length > 0)
+      ? attachedFs.fields
+      : (initialCatId ? customFields.filter((f) => f.categoryId === Number(initialCatId)) : []);
+
+    const initialCustomData: Record<string, any> = {};
+    fieldsToUse.forEach((f) => {
+      initialCustomData[f.name] = f.defaultValue || '';
+    });
+
     setModelName('');
     setModelNumber('');
     setModelMinThreshold('5');
     setModelImageUrl('');
-    setModelCustomFieldsData({});
+    setModelCustomFieldsData(initialCustomData);
     setShowModelUrlInput(false);
     setIsModelModalOpen(true);
   };
@@ -388,32 +405,89 @@ export const CategoriesAndFieldsView: React.FC = () => {
   const handleOpenEditModel = (m: Model) => {
     setEditingModelId(m.id);
     setModelCategoryId(m.categoryId);
-    setModelFieldSetId(m.fieldSetId || '');
+
+    // Auto-resolve field set: explicit m.fieldSetId or attached field set for m.categoryId
+    const catFieldSets = fieldSets.filter((fs) => fs.categoryId === m.categoryId);
+    const explicitFs = m.fieldSetId ? fieldSets.find((fs) => fs.id === m.fieldSetId) : null;
+    const attachedFs = explicitFs || catFieldSets[0];
+    const resolvedFsId = attachedFs ? attachedFs.id : (m.fieldSetId || '');
+    setModelFieldSetId(resolvedFsId);
+
     setModelName(m.name);
     setModelNumber(m.modelNumber);
     setModelMinThreshold(m.minThreshold !== undefined && m.minThreshold !== null ? m.minThreshold.toString() : '5');
     setModelImageUrl(m.imageUrl || '');
-    setModelCustomFieldsData(m.customFieldsData || {});
+
+    const fieldsToUse: CustomField[] = (attachedFs && attachedFs.fields && attachedFs.fields.length > 0)
+      ? attachedFs.fields
+      : customFields.filter((f) => f.categoryId === m.categoryId);
+
+    const initialData: Record<string, any> = { ...(m.customFieldsData || {}) };
+    fieldsToUse.forEach((f) => {
+      if (initialData[f.name] === undefined) {
+        initialData[f.name] = f.defaultValue || '';
+      }
+    });
+
+    setModelCustomFieldsData(initialData);
     setShowModelUrlInput(false);
     setIsModelModalOpen(true);
+  };
+
+  const handleModelCategoryChange = (newCatId: number | '') => {
+    setModelCategoryId(newCatId);
+    if (!newCatId) {
+      setModelFieldSetId('');
+      setModelCustomFieldsData({});
+      return;
+    }
+
+    // Automatically find and attach the field set attached to this newly selected category
+    const catFieldSets = fieldSets.filter((fs) => fs.categoryId === Number(newCatId));
+    const attachedFs = catFieldSets[0];
+    const newFsId = attachedFs ? attachedFs.id : '';
+    setModelFieldSetId(newFsId);
+
+    // Automatically extract all associated custom fields for this category
+    const fieldsToUse: CustomField[] = (attachedFs && attachedFs.fields && attachedFs.fields.length > 0)
+      ? attachedFs.fields
+      : customFields.filter((f) => f.categoryId === Number(newCatId));
+
+    setModelCustomFieldsData((prev) => {
+      const updated: Record<string, any> = {};
+      fieldsToUse.forEach((f) => {
+        if (prev && prev[f.name] !== undefined) {
+          updated[f.name] = prev[f.name];
+        } else {
+          updated[f.name] = f.defaultValue || '';
+        }
+      });
+      return updated;
+    });
   };
 
   const handleModelFieldSetChange = (fsId: number | '') => {
     setModelFieldSetId(fsId);
     if (!fsId) {
-      setModelCustomFieldsData({});
+      const catFields = modelCategoryId ? customFields.filter((f) => f.categoryId === Number(modelCategoryId)) : [];
+      const updated: Record<string, any> = {};
+      catFields.forEach((f) => {
+        updated[f.name] = (modelCustomFieldsData && modelCustomFieldsData[f.name] !== undefined)
+          ? modelCustomFieldsData[f.name]
+          : (f.defaultValue || '');
+      });
+      setModelCustomFieldsData(updated);
       return;
     }
-    const foundSet = fieldSets.find(f => f.id === fsId);
-    if (foundSet && foundSet.fields) {
-      const initial: Record<string, any> = { ...modelCustomFieldsData };
-      foundSet.fields.forEach(f => {
-        if (initial[f.name] === undefined) {
-          initial[f.name] = f.defaultValue || '';
-        }
-      });
-      setModelCustomFieldsData(initial);
-    }
+    const foundSet = fieldSets.find((f) => f.id === fsId);
+    const fieldsToUse = foundSet?.fields || [];
+    const initial: Record<string, any> = { ...modelCustomFieldsData };
+    fieldsToUse.forEach((f) => {
+      if (initial[f.name] === undefined) {
+        initial[f.name] = f.defaultValue || '';
+      }
+    });
+    setModelCustomFieldsData(initial);
   };
 
   const handleSaveModel = async (e: React.FormEvent) => {
@@ -422,32 +496,30 @@ export const CategoriesAndFieldsView: React.FC = () => {
 
     try {
       setSubmitting(true);
+      // Auto-resolve field set attached to category if not explicitly specified
+      const matchingFs = fieldSets.find((fs) => fs.categoryId === Number(modelCategoryId));
+      const effectiveFieldSetId = modelFieldSetId || (matchingFs ? matchingFs.id : null);
+
+      const payload = {
+        categoryId: Number(modelCategoryId),
+        fieldSetId: effectiveFieldSetId ? Number(effectiveFieldSetId) : null,
+        name: modelName,
+        modelNumber,
+        minThreshold: parseFloat(modelMinThreshold) || 5,
+        imageUrl: modelImageUrl || null,
+        customFieldsData: modelCustomFieldsData,
+      };
+
       if (editingModelId) {
         await fetchApi(`/api/models/${editingModelId}`, {
           method: 'PUT',
-          body: JSON.stringify({
-            categoryId: Number(modelCategoryId),
-            fieldSetId: modelFieldSetId ? Number(modelFieldSetId) : null,
-            name: modelName,
-            modelNumber,
-            minThreshold: parseFloat(modelMinThreshold) || 5,
-            imageUrl: modelImageUrl || null,
-            customFieldsData: modelCustomFieldsData,
-          }),
+          body: JSON.stringify(payload),
         });
         showToast(`Model "${modelName}" updated!`, 'success');
       } else {
         await fetchApi('/api/models', {
           method: 'POST',
-          body: JSON.stringify({
-            categoryId: Number(modelCategoryId),
-            fieldSetId: modelFieldSetId ? Number(modelFieldSetId) : null,
-            name: modelName,
-            modelNumber,
-            minThreshold: parseFloat(modelMinThreshold) || 5,
-            imageUrl: modelImageUrl || null,
-            customFieldsData: modelCustomFieldsData,
-          }),
+          body: JSON.stringify(payload),
         });
         showToast(`Model "${modelName}" registered!`, 'success');
       }
@@ -553,23 +625,23 @@ export const CategoriesAndFieldsView: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Top Header */}
-      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
+      <div className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-2xs flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <FolderKanban className="w-5 h-5 text-indigo-600" />
-            <h2 className="text-xl font-extrabold text-slate-900">Categories, Dynamic Fields & Templates</h2>
+            <FolderKanban className="w-5 h-5 text-indigo-700" />
+            <h2 className="text-xl font-bold text-slate-900">Categories, Dynamic Fields & Templates</h2>
           </div>
-          <p className="text-xs text-slate-500 mt-0.5">
+          <p className="text-xs text-slate-700 font-medium mt-0.5">
             Full record management for master categories, dynamic custom fields, field sets, models, and requisition reasons.
           </p>
         </div>
 
         {/* Sub-tabs */}
-        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs overflow-x-auto">
+        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-300 text-xs overflow-x-auto">
           <button
             onClick={() => setActiveSubTab('categories')}
             className={`px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap ${
-              activeSubTab === 'categories' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              activeSubTab === 'categories' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-700 hover:text-slate-950'
             }`}
           >
             1. Categories ({categories.length})
@@ -577,7 +649,7 @@ export const CategoriesAndFieldsView: React.FC = () => {
           <button
             onClick={() => setActiveSubTab('custom_fields')}
             className={`px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap ${
-              activeSubTab === 'custom_fields' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              activeSubTab === 'custom_fields' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-700 hover:text-slate-950'
             }`}
           >
             2. Custom Fields ({customFields.length})
@@ -585,7 +657,7 @@ export const CategoriesAndFieldsView: React.FC = () => {
           <button
             onClick={() => setActiveSubTab('field_sets')}
             className={`px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap ${
-              activeSubTab === 'field_sets' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              activeSubTab === 'field_sets' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-700 hover:text-slate-950'
             }`}
           >
             3. Field Sets ({fieldSets.length})
@@ -593,7 +665,7 @@ export const CategoriesAndFieldsView: React.FC = () => {
           <button
             onClick={() => setActiveSubTab('models')}
             className={`px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap ${
-              activeSubTab === 'models' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              activeSubTab === 'models' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-700 hover:text-slate-950'
             }`}
           >
             4. Models ({models.length})
@@ -601,7 +673,7 @@ export const CategoriesAndFieldsView: React.FC = () => {
           <button
             onClick={() => setActiveSubTab('reasons')}
             className={`px-3 py-1.5 rounded-lg font-bold transition whitespace-nowrap ${
-              activeSubTab === 'reasons' ? 'bg-white text-slate-900 shadow-xs' : 'text-slate-600 hover:text-slate-900'
+              activeSubTab === 'reasons' ? 'bg-white text-slate-900 shadow-2xs' : 'text-slate-700 hover:text-slate-950'
             }`}
           >
             5. Requisition Reasons ({reasons.length})
@@ -611,16 +683,16 @@ export const CategoriesAndFieldsView: React.FC = () => {
 
       {/* TAB 1: Categories View */}
       {activeSubTab === 'categories' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-200 pb-3">
             <div>
               <h3 className="text-sm font-bold text-slate-900">Asset & Consumable Categories</h3>
-              <p className="text-xs text-slate-500">Master classification codes for the entire organization</p>
+              <p className="text-xs text-slate-700 font-medium">Master classification codes for the entire organization</p>
             </div>
             {(currentRole === 'admin' || currentRole === 'super_manager') && (
               <button
                 onClick={handleOpenCreateCategory}
-                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-md shadow-blue-600/20"
+                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer shadow-2xs"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add Category</span>
@@ -630,17 +702,17 @@ export const CategoriesAndFieldsView: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {categories.map((cat) => (
-              <div key={cat.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 space-y-2 text-xs relative group hover:border-blue-300 transition">
+              <div key={cat.id} className="p-4 rounded-xl border border-slate-300 bg-slate-50/80 space-y-2 text-xs relative group hover:border-blue-400 transition">
                 <div className="flex items-center justify-between">
-                  <span className="font-mono font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                  <span className="font-mono font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded border border-blue-300">
                     {cat.code}
                   </span>
                   <div className="flex items-center gap-1.5">
                     <span
                       className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
                         cat.type === 'asset'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-emerald-100 text-emerald-800'
+                          ? 'bg-blue-100 text-blue-900 border border-blue-300'
+                          : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
                       }`}
                     >
                       {cat.type}
@@ -649,14 +721,14 @@ export const CategoriesAndFieldsView: React.FC = () => {
                       <div className="flex items-center gap-0.5">
                         <button
                           onClick={() => handleOpenEditCategory(cat)}
-                          className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                          className="p-1 text-slate-600 hover:text-blue-700 hover:bg-blue-50 rounded cursor-pointer"
                           title="Edit Category"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => handleDeleteCategory(cat)}
-                          className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded"
+                          className="p-1 text-slate-600 hover:text-rose-700 hover:bg-rose-50 rounded cursor-pointer"
                           title="Delete Category"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -666,7 +738,7 @@ export const CategoriesAndFieldsView: React.FC = () => {
                   </div>
                 </div>
                 <h4 className="font-bold text-slate-900 text-sm">{cat.name}</h4>
-                <p className="text-slate-500 text-[11px]">{cat.description || 'General organizational inventory'}</p>
+                <p className="text-slate-700 font-medium text-[11px]">{cat.description || 'General organizational inventory'}</p>
               </div>
             ))}
           </div>
@@ -675,18 +747,18 @@ export const CategoriesAndFieldsView: React.FC = () => {
 
       {/* TAB 2: Custom Fields View */}
       {activeSubTab === 'custom_fields' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-200 pb-3">
             <div>
               <h3 className="text-sm font-bold text-slate-900">Custom Dynamic Fields</h3>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-700 font-medium">
                 Create and manage attributes (textbox, numeric, dropdown, radio, date, boolean) under allotted categories
               </p>
             </div>
             {(currentRole === 'admin' || currentRole === 'super_manager') && (
               <button
                 onClick={handleOpenCreateCustomField}
-                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-indigo-600/20 cursor-pointer"
+                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Create Custom Field</span>
@@ -698,25 +770,25 @@ export const CategoriesAndFieldsView: React.FC = () => {
             {customFields.map((f) => {
               const cat = categories.find((c) => c.id === f.categoryId);
               return (
-                <div key={f.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 space-y-2 text-xs relative group hover:border-indigo-300 transition">
+                <div key={f.id} className="p-4 rounded-xl border border-slate-300 bg-slate-50/80 space-y-2 text-xs relative group hover:border-indigo-400 transition">
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-slate-500">{cat?.name || 'Category'}</span>
+                    <span className="font-semibold text-slate-700">{cat?.name || 'Category'}</span>
                     <div className="flex items-center gap-1.5">
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-indigo-100 text-indigo-800">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-indigo-100 text-indigo-900 border border-indigo-300">
                         {f.fieldType}
                       </span>
                       {(currentRole === 'admin' || currentRole === 'super_manager') && (
                         <div className="flex items-center gap-0.5">
                           <button
                             onClick={() => handleOpenEditCustomField(f)}
-                            className="text-slate-400 hover:text-indigo-600 p-1 rounded hover:bg-indigo-50 transition"
+                            className="text-slate-600 hover:text-indigo-700 p-1 rounded hover:bg-indigo-50 transition cursor-pointer"
                             title="Edit Custom Field"
                           >
                             <Edit2 className="w-3.5 h-3.5" />
                           </button>
                           <button
                             onClick={() => handleDeleteCustomField(f)}
-                            className="text-slate-400 hover:text-red-600 p-1 rounded hover:bg-red-50 transition"
+                            className="text-slate-600 hover:text-rose-700 p-1 rounded hover:bg-rose-50 transition cursor-pointer"
                             title="Delete Custom Field"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -726,16 +798,16 @@ export const CategoriesAndFieldsView: React.FC = () => {
                     </div>
                   </div>
                   <h4 className="font-bold text-slate-900 text-sm">{f.label}</h4>
-                  <p className="font-mono text-slate-500 text-[11px]">Key: {f.name}</p>
+                  <p className="font-mono text-slate-700 font-semibold text-[11px]">Key: {f.name}</p>
                   {f.isRequired && (
-                    <span className="inline-block text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                    <span className="inline-block text-[10px] font-bold text-amber-900 bg-amber-100 border border-amber-300 px-1.5 py-0.5 rounded">
                       Required
                     </span>
                   )}
                   {f.options && f.options.length > 0 && (
                     <div className="flex flex-wrap gap-1 pt-1">
                       {f.options.map((opt, i) => (
-                        <span key={i} className="px-1.5 py-0.5 bg-white border border-slate-200 rounded text-[10px] text-slate-700">
+                        <span key={i} className="px-1.5 py-0.5 bg-white border border-slate-300 rounded text-[10px] text-slate-800 font-medium">
                           {opt}
                         </span>
                       ))}
@@ -750,18 +822,18 @@ export const CategoriesAndFieldsView: React.FC = () => {
 
       {/* TAB 3: Field Sets View */}
       {activeSubTab === 'field_sets' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-200 pb-3">
             <div>
               <h3 className="text-sm font-bold text-slate-900">Field Sets (Grouped Custom Fields)</h3>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-700 font-medium">
                 Bundle dynamic custom fields into reusable specification sets attached to Models
               </p>
             </div>
             {(currentRole === 'admin' || currentRole === 'super_manager') && (
               <button
                 onClick={() => handleOpenFieldSetModal()}
-                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-indigo-600/20 cursor-pointer"
+                className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Create Field Set</span>
@@ -773,26 +845,26 @@ export const CategoriesAndFieldsView: React.FC = () => {
             {fieldSets.map((fs) => {
               const cat = categories.find((c) => c.id === fs.categoryId);
               return (
-                <div key={fs.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 space-y-3 text-xs flex flex-col justify-between hover:border-indigo-300 transition">
+                <div key={fs.id} className="p-4 rounded-xl border border-slate-300 bg-slate-50/80 space-y-3 text-xs flex flex-col justify-between hover:border-indigo-400 transition">
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="font-semibold text-slate-500">{cat?.name}</span>
+                      <span className="font-semibold text-slate-700">{cat?.name}</span>
                       <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-800">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 text-indigo-900 border border-indigo-300">
                           {fs.fields?.length || 0} Dynamic Fields
                         </span>
                         {(currentRole === 'admin' || currentRole === 'super_manager') && (
                           <div className="flex items-center gap-1">
                             <button
                               onClick={() => handleOpenFieldSetModal(fs)}
-                              className="text-slate-400 hover:text-indigo-600 p-1 rounded hover:bg-slate-100 transition"
+                              className="text-slate-600 hover:text-indigo-700 p-1 rounded hover:bg-slate-200/80 transition cursor-pointer"
                               title="Edit Field Set"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
                             <button
                               onClick={() => handleDeleteFieldSet(fs)}
-                              className="text-slate-400 hover:text-red-600 p-1 rounded hover:bg-slate-100 transition"
+                              className="text-slate-600 hover:text-rose-700 p-1 rounded hover:bg-rose-50 transition cursor-pointer"
                               title="Delete Field Set"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -803,24 +875,24 @@ export const CategoriesAndFieldsView: React.FC = () => {
                     </div>
                     <div>
                       <h4 className="font-bold text-slate-900 text-sm">{fs.name}</h4>
-                      <p className="text-slate-500 text-[11px]">{fs.description || 'Specification template for models'}</p>
+                      <p className="text-slate-700 font-medium text-[11px]">{fs.description || 'Specification template for models'}</p>
                     </div>
                     {fs.fields && fs.fields.length > 0 ? (
-                      <div className="bg-white p-3 rounded-lg border border-slate-200 space-y-1.5 max-h-48 overflow-y-auto">
+                      <div className="bg-white p-3 rounded-lg border border-slate-300 space-y-1.5 max-h-48 overflow-y-auto">
                         {fs.fields.map((fld) => (
                           <div key={fld.id} className="flex items-center justify-between text-[11px]">
-                            <span className="font-medium text-slate-800">• {fld.label}</span>
+                            <span className="font-semibold text-slate-900">• {fld.label}</span>
                             <div className="flex items-center gap-1">
                               {fld.isRequired && (
-                                <span className="text-[9px] text-amber-700 bg-amber-50 px-1 rounded">req</span>
+                                <span className="text-[9px] font-bold text-amber-900 bg-amber-100 border border-amber-300 px-1 rounded">req</span>
                               )}
-                              <span className="text-slate-400 font-mono text-[10px]">{fld.fieldType}</span>
+                              <span className="text-slate-700 font-mono font-semibold text-[10px]">{fld.fieldType}</span>
                             </div>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div className="bg-white/60 p-3 rounded-lg border border-dashed border-slate-300 text-slate-400 text-center text-[11px]">
+                      <div className="bg-white/80 p-3 rounded-lg border border-dashed border-slate-300 text-slate-600 text-center text-[11px] font-medium">
                         No dynamic fields currently linked. Click edit to attach fields.
                       </div>
                     )}
@@ -834,18 +906,18 @@ export const CategoriesAndFieldsView: React.FC = () => {
 
       {/* TAB 4: Models View */}
       {activeSubTab === 'models' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-200 pb-3">
             <div>
               <h3 className="text-sm font-bold text-slate-900">Equipment & Item Models</h3>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-700 font-medium">
                 Models link to a category and dynamic Field Set for consistent stock data capture
               </p>
             </div>
             {(currentRole === 'admin' || currentRole === 'super_manager') && (
               <button
                 onClick={handleOpenCreateModel}
-                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-blue-600/20 cursor-pointer"
+                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Create Model</span>
@@ -855,25 +927,25 @@ export const CategoriesAndFieldsView: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {models.map((m) => (
-              <div key={m.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 space-y-2.5 text-xs relative group hover:border-blue-300 transition">
+              <div key={m.id} className="p-4 rounded-xl border border-slate-300 bg-slate-50/80 space-y-2.5 text-xs relative group hover:border-blue-400 transition">
                 <div className="flex items-center justify-between">
-                  <span className="font-mono font-bold text-slate-700 bg-slate-200 px-2 py-0.5 rounded">
+                  <span className="font-mono font-bold text-slate-900 bg-slate-200/90 px-2 py-0.5 rounded border border-slate-300">
                     {m.modelNumber}
                   </span>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-blue-700 font-semibold">{m.category?.name}</span>
+                    <span className="text-[10px] text-blue-900 font-bold">{m.category?.name}</span>
                     {(currentRole === 'admin' || currentRole === 'super_manager') && (
                       <div className="flex items-center gap-0.5">
                         <button
                           onClick={() => handleOpenEditModel(m)}
-                          className="text-slate-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50 transition cursor-pointer"
+                          className="text-slate-600 hover:text-blue-700 p-1 rounded hover:bg-blue-50 transition cursor-pointer"
                           title="Edit Model"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={() => handleDeleteModel(m)}
-                          className="text-slate-400 hover:text-red-600 p-1 rounded hover:bg-red-50 transition cursor-pointer"
+                          className="text-slate-600 hover:text-rose-700 p-1 rounded hover:bg-rose-50 transition cursor-pointer"
                           title="Delete Model"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -885,17 +957,17 @@ export const CategoriesAndFieldsView: React.FC = () => {
                 <h4 className="font-bold text-slate-900 text-sm">{m.name}</h4>
 
                 {/* Stock & Threshold metrics for this Model */}
-                <div className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-200 text-[11px]">
+                <div className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-300 text-[11px]">
                   <div>
-                    <span className="text-slate-500 font-medium">Low Stock Alert:</span>{' '}
-                    <span className="font-bold font-mono text-slate-800">≤ {m.minThreshold ?? 5} units</span>
+                    <span className="text-slate-700 font-semibold">Low Stock Alert:</span>{' '}
+                    <span className="font-bold font-mono text-slate-900">≤ {m.minThreshold ?? 5} units</span>
                   </div>
                   {m.availableStockQuantity !== undefined && (
                     <span
                       className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
                         m.isLowStock
-                          ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                          : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                          ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                          : 'bg-emerald-100 text-emerald-900 border border-emerald-300'
                       }`}
                     >
                       {m.isLowStock ? 'Low Stock' : 'In Stock'}: {m.availableStockQuantity} avail
@@ -905,14 +977,14 @@ export const CategoriesAndFieldsView: React.FC = () => {
 
                 {m.fieldSet ? (
                   <div>
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded text-[10px] font-semibold">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-indigo-50 text-indigo-900 border border-indigo-300 rounded text-[10px] font-bold">
                       <Layers className="w-3 h-3" />
                       Field Set: {m.fieldSet.name} ({m.fieldSet.fields?.length || 0} fields)
                     </span>
                   </div>
                 ) : (
                   <div>
-                    <span className="text-[10px] text-slate-400 italic">No Field Set linked</span>
+                    <span className="text-[10px] text-slate-600 italic font-medium">No Field Set linked</span>
                   </div>
                 )}
               </div>
@@ -923,18 +995,18 @@ export const CategoriesAndFieldsView: React.FC = () => {
 
       {/* TAB 5: Requisition Reasons */}
       {activeSubTab === 'reasons' && (
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-5 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xs p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-200 pb-3">
             <div>
               <h3 className="text-sm font-bold text-slate-900">Pre-Fed Request Reasons</h3>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-700 font-medium">
                 Standardized options displayed at self-service kiosks and requisition punch forms
               </p>
             </div>
             {(currentRole === 'admin' || currentRole === 'super_manager') && (
               <button
                 onClick={handleOpenCreateReason}
-                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-blue-600/20 cursor-pointer"
+                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-semibold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Add Request Reason</span>
@@ -944,23 +1016,23 @@ export const CategoriesAndFieldsView: React.FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {reasons.map((r) => (
-              <div key={r.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/60 space-y-2 text-xs relative group hover:border-amber-300 transition">
+              <div key={r.id} className="p-4 rounded-xl border border-slate-300 bg-slate-50/80 space-y-2 text-xs relative group hover:border-amber-400 transition">
                 <div className="flex items-center justify-between">
-                  <span className="font-mono font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 uppercase text-[10px]">
+                  <span className="font-mono font-bold text-amber-950 bg-amber-100 px-2 py-0.5 rounded border border-amber-300 uppercase text-[10px]">
                     {r.categoryType || 'ALL ITEMS'}
                   </span>
                   {(currentRole === 'admin' || currentRole === 'super_manager') && (
                     <div className="flex items-center gap-0.5">
                       <button
                         onClick={() => handleOpenEditReason(r)}
-                        className="text-slate-400 hover:text-blue-600 p-1 rounded hover:bg-blue-50 transition cursor-pointer"
+                        className="text-slate-600 hover:text-blue-700 p-1 rounded hover:bg-blue-50 transition cursor-pointer"
                         title="Edit Reason"
                       >
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
                       <button
                         onClick={() => handleDeleteReason(r)}
-                        className="text-slate-400 hover:text-red-600 p-1 rounded hover:bg-red-50 transition cursor-pointer"
+                        className="text-slate-600 hover:text-rose-700 p-1 rounded hover:bg-rose-50 transition cursor-pointer"
                         title="Delete Reason"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -969,7 +1041,7 @@ export const CategoriesAndFieldsView: React.FC = () => {
                   )}
                 </div>
                 <h4 className="font-bold text-slate-900 text-sm">{r.reason}</h4>
-                <p className="text-slate-500 text-[11px]">
+                <p className="text-slate-700 font-medium text-[11px]">
                   Applicable for: {r.categoryType === 'asset' ? 'Capital Assets' : r.categoryType === 'consumable' ? 'Consumable Stock' : 'All Materials'}
                 </p>
               </div>
@@ -1403,8 +1475,9 @@ export const CategoriesAndFieldsView: React.FC = () => {
                   <select
                     value={modelCategoryId}
                     required
-                    onChange={(e) => setModelCategoryId(Number(e.target.value))}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                    onChange={(e) => handleModelCategoryChange(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white font-semibold text-slate-800"
+                    title="Select category to automatically load attached specification field set"
                   >
                     {categories.map((c) => (
                       <option key={c.id} value={c.id}>
@@ -1426,7 +1499,8 @@ export const CategoriesAndFieldsView: React.FC = () => {
                     placeholder="5"
                     value={modelMinThreshold}
                     onChange={(e) => setModelMinThreshold(e.target.value)}
-                    className="w-full px-3 py-2 font-mono border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                    className="w-full px-3 py-2 font-mono border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
+                    title="Minimum stock threshold for low-stock alerts"
                   />
                 </div>
               </div>
@@ -1506,53 +1580,78 @@ export const CategoriesAndFieldsView: React.FC = () => {
                 )}
               </div>
 
-              {/* Field Set Link & Dynamic Form Fields */}
-              <div className="space-y-3">
-                <div>
-                  <label className="block font-bold text-slate-700 mb-1 flex items-center justify-between">
-                    <span>Link Field Set (Dynamic Custom Fields)</span>
-                    <span className="text-[10px] text-indigo-600 font-normal">Fields appear immediately below</span>
-                  </label>
-                  <select
-                    value={modelFieldSetId}
-                    onChange={(e) => handleModelFieldSetChange(e.target.value ? Number(e.target.value) : '')}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white font-semibold text-indigo-900"
-                  >
-                    <option value="">-- No Field Set Attached --</option>
-                    {fieldSets.map((fs) => (
-                      <option key={fs.id} value={fs.id}>
-                        {fs.name} ({fs.fields?.length || 0} specification fields)
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              {/* Dynamic Specification Custom Fields - Automatically linked to selected category */}
+              {(() => {
+                const selectedCat = categories.find((c) => c.id === Number(modelCategoryId));
+                const catFieldSets = fieldSets.filter((fs) => fs.categoryId === Number(modelCategoryId));
+                const activeFs = modelFieldSetId
+                  ? fieldSets.find((fs) => fs.id === Number(modelFieldSetId))
+                  : catFieldSets[0];
 
-                {/* Dynamic Fieldset Inputs rendered immediately when Field Set is selected */}
-                {modelFieldSetId ? (
-                  (() => {
-                    const selectedFieldSet = fieldSets.find(fs => fs.id === Number(modelFieldSetId));
-                    const fields = selectedFieldSet?.fields || [];
+                const displayFields: CustomField[] = (activeFs && activeFs.fields && activeFs.fields.length > 0)
+                  ? activeFs.fields
+                  : (modelCategoryId ? customFields.filter((f) => f.categoryId === Number(modelCategoryId)) : []);
 
-                    if (fields.length === 0) {
-                      return (
-                        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs">
-                          This field set has no fields defined yet.
+                return (
+                  <div className="space-y-3">
+                    {/* Category Field Set Header Banner */}
+                    <div className="p-3 bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 rounded-xl flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-lg bg-gradient-to-r from-[#FF8C00] to-[#FF4500] text-white flex items-center justify-center shrink-0 shadow-xs">
+                          <Layers className="w-4 h-4" />
                         </div>
-                      );
-                    }
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-extrabold text-slate-900 text-xs truncate">
+                              {activeFs ? activeFs.name : `${selectedCat?.name || 'Category'} Specification Fields`}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-extrabold border border-amber-300">
+                              Auto-Linked to Category
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-amber-900/80">
+                            {displayFields.length > 0
+                              ? `${displayFields.length} dynamic specification fields attached to ${selectedCat?.name || 'this category'}`
+                              : `No specification fields configured for ${selectedCat?.name || 'this category'} yet`}
+                          </p>
+                        </div>
+                      </div>
 
-                    return (
-                      <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-4 space-y-3">
-                        <div className="flex items-center justify-between pb-1 border-b border-indigo-100">
-                          <span className="font-bold text-indigo-950 flex items-center gap-1.5">
-                            <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                            Model Specification Values ({selectedFieldSet?.name})
+                      {/* If category has multiple field sets, allow switching between them */}
+                      {catFieldSets.length > 1 && (
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <label className="text-[10px] font-bold text-slate-600">Field Set:</label>
+                          <select
+                            value={modelFieldSetId}
+                            onChange={(e) => handleModelFieldSetChange(e.target.value ? Number(e.target.value) : '')}
+                            className="text-xs px-2.5 py-1 bg-white border border-amber-300 rounded-lg font-semibold text-slate-800 focus:ring-2 focus:ring-[#FF8C00]"
+                            title="Switch between field sets for this category"
+                          >
+                            {catFieldSets.map((fs) => (
+                              <option key={fs.id} value={fs.id}>
+                                {fs.name} ({fs.fields?.length || 0} fields)
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Custom Fields inputs list */}
+                    {displayFields.length > 0 ? (
+                      <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-3">
+                        <div className="flex items-center justify-between pb-1.5 border-b border-slate-200">
+                          <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-[#FF8C00]" />
+                            Model Specification Custom Fields ({activeFs?.name || selectedCat?.name})
                           </span>
-                          <span className="text-[10px] text-indigo-600 font-medium">Prefills & locks in stock items</span>
+                          <span className="text-[10px] text-slate-500 font-medium">
+                            Prefills & locks in stock items
+                          </span>
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                          {fields.map((f) => (
+                          {displayFields.map((f, idx) => (
                             <div key={f.id} className="space-y-1">
                               <label className="block text-[11px] font-bold text-slate-700">
                                 {f.label} {f.isRequired && <span className="text-red-500">*</span>}
@@ -1561,6 +1660,8 @@ export const CategoriesAndFieldsView: React.FC = () => {
                               {f.fieldType === 'text' && (
                                 <input
                                   type="text"
+                                  tabIndex={10 + idx}
+                                  title={f.label}
                                   placeholder={f.defaultValue || `Enter ${f.label}`}
                                   value={modelCustomFieldsData[f.name] ?? ''}
                                   onChange={(e) =>
@@ -1569,7 +1670,7 @@ export const CategoriesAndFieldsView: React.FC = () => {
                                       [f.name]: e.target.value,
                                     })
                                   }
-                                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500"
+                                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00]"
                                 />
                               )}
 
@@ -1577,6 +1678,8 @@ export const CategoriesAndFieldsView: React.FC = () => {
                                 <input
                                   type="number"
                                   step="any"
+                                  tabIndex={10 + idx}
+                                  title={f.label}
                                   placeholder={f.defaultValue || '0'}
                                   value={modelCustomFieldsData[f.name] ?? ''}
                                   onChange={(e) =>
@@ -1585,12 +1688,14 @@ export const CategoriesAndFieldsView: React.FC = () => {
                                       [f.name]: e.target.value,
                                     })
                                   }
-                                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono focus:ring-2 focus:ring-indigo-500"
+                                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-mono focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00]"
                                 />
                               )}
 
                               {f.fieldType === 'dropdown' && (
                                 <select
+                                  tabIndex={10 + idx}
+                                  title={f.label}
                                   value={modelCustomFieldsData[f.name] ?? ''}
                                   onChange={(e) =>
                                     setModelCustomFieldsData({
@@ -1598,7 +1703,7 @@ export const CategoriesAndFieldsView: React.FC = () => {
                                       [f.name]: e.target.value,
                                     })
                                   }
-                                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500"
+                                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00]"
                                 >
                                   <option value="">-- Select {f.label} --</option>
                                   {f.options?.map((opt, i) => (
@@ -1624,7 +1729,7 @@ export const CategoriesAndFieldsView: React.FC = () => {
                                             [f.name]: e.target.value,
                                           })
                                         }
-                                        className="text-indigo-600 focus:ring-indigo-500"
+                                        className="text-[#FF8C00] focus:ring-[#FF8C00]"
                                       />
                                       <span>{opt}</span>
                                     </label>
@@ -1635,6 +1740,8 @@ export const CategoriesAndFieldsView: React.FC = () => {
                               {f.fieldType === 'date' && (
                                 <input
                                   type="date"
+                                  tabIndex={10 + idx}
+                                  title={f.label}
                                   value={modelCustomFieldsData[f.name] ?? ''}
                                   onChange={(e) =>
                                     setModelCustomFieldsData({
@@ -1642,7 +1749,7 @@ export const CategoriesAndFieldsView: React.FC = () => {
                                       [f.name]: e.target.value,
                                     })
                                   }
-                                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-indigo-500"
+                                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00]"
                                 />
                               )}
 
@@ -1657,7 +1764,7 @@ export const CategoriesAndFieldsView: React.FC = () => {
                                         [f.name]: e.target.checked,
                                       })
                                     }
-                                    className="w-4 h-4 rounded-sm text-indigo-600 border-slate-300 focus:ring-indigo-500"
+                                    className="w-4 h-4 rounded-sm text-[#FF8C00] border-slate-300 focus:ring-[#FF8C00]"
                                   />
                                   <span>Yes / Enabled</span>
                                 </label>
@@ -1666,10 +1773,19 @@ export const CategoriesAndFieldsView: React.FC = () => {
                           ))}
                         </div>
                       </div>
-                    );
-                  })()
-                ) : null}
-              </div>
+                    ) : (
+                      <div className="p-4 bg-slate-50 border border-dashed border-slate-300 rounded-xl text-center space-y-1">
+                        <p className="text-xs font-semibold text-slate-700">
+                          No specification fields or field sets attached to "{selectedCat?.name || 'this category'}" yet.
+                        </p>
+                        <p className="text-[11px] text-slate-400">
+                          You can define custom fields in the "Custom Fields" tab or configure specification groups in the "Specification Field Sets" tab.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
                 <button
@@ -1682,7 +1798,7 @@ export const CategoriesAndFieldsView: React.FC = () => {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-md disabled:opacity-50 cursor-pointer"
+                  className="px-5 py-2 bg-gradient-to-r from-[#FF8C00] to-[#FF4500] hover:from-[#e07b00] hover:to-[#e03d00] text-white font-bold rounded-xl shadow-xs disabled:opacity-50 cursor-pointer"
                 >
                   {editingModelId ? 'Update Model' : 'Save Model'}
                 </button>

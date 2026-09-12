@@ -1,6 +1,6 @@
 {
-  "name": "Asset & Consumables Management",
-  "description": "Multi-branch asset and consumables inventory management, custom field sets, employee requests, location tracking, transfers, and vendor repair logging.",
+  "name": "AU Assetflow",
+  "description": "AU Equipment & Tools - Multi-branch inventory, asset management, preventative maintenance, and tool tracking.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -347,6 +347,7 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
           <button
             id="btn-open-add-vendor"
             onClick={handleOpenAddVendor}
+            title="Register a new authorized equipment vendor or service contractor"
             className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
@@ -355,7 +356,8 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
           <button
             id="btn-open-send-repair"
             onClick={handleOpenDispatch}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-md shadow-indigo-600/20 flex items-center gap-1.5 cursor-pointer"
+            title="Create maintenance or overhaul ticket and dispatch asset to vendor"
+            className="px-4 py-2 bg-gradient-to-r from-[#FF8C00] to-[#FF4500] hover:from-[#FF8C00] hover:to-[#e03e00] text-white rounded-xl text-xs font-bold transition shadow-md shadow-[#FF8C00]/20 flex items-center gap-1.5 cursor-pointer"
           >
             <Wrench className="w-4 h-4" />
             <span>Dispatch Asset for Repair</span>
@@ -367,9 +369,10 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
       <div className="flex border-b border-slate-200 gap-6 text-xs font-bold">
         <button
           onClick={() => setActiveTab('repairs')}
+          title="View active and completed repair tickets"
           className={`pb-3.5 px-1 border-b-2 transition flex items-center gap-2 cursor-pointer ${
             activeTab === 'repairs'
-              ? 'border-indigo-600 text-indigo-600'
+              ? 'border-[#FF8C00] text-[#FF8C00]'
               : 'border-transparent text-slate-500 hover:text-slate-900'
           }`}
         >
@@ -379,9 +382,10 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
 
         <button
           onClick={() => setActiveTab('vendors')}
+          title="View directory of approved equipment suppliers and repair contractors"
           className={`pb-3.5 px-1 border-b-2 transition flex items-center gap-2 cursor-pointer ${
             activeTab === 'vendors'
-              ? 'border-indigo-600 text-indigo-600'
+              ? 'border-[#FF8C00] text-[#FF8C00]'
               : 'border-transparent text-slate-500 hover:text-slate-900'
           }`}
         >
@@ -392,16 +396,17 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
         {isAdminOrSuper && (
           <button
             onClick={() => setActiveTab('assignments')}
+            title="Admin multi-branch access control for vendors"
             className={`pb-3.5 px-1 border-b-2 transition flex items-center gap-2 cursor-pointer ${
               activeTab === 'assignments'
-                ? 'border-indigo-600 text-indigo-600'
+                ? 'border-[#FF8C00] text-[#FF8C00]'
                 : 'border-transparent text-slate-500 hover:text-slate-900'
             }`}
           >
-            <ShieldCheck className="w-4 h-4 text-blue-600" />
+            <ShieldCheck className="w-4 h-4 text-[#FF8C00]" />
             <span className="flex items-center gap-1.5">
               Branch Visibility Matrix
-              <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-extrabold uppercase">
+              <span className="px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 text-[10px] font-extrabold uppercase">
                 Admin
               </span>
             </span>
@@ -703,9 +708,11 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
                 </label>
                 <select
                   required
+                  tabIndex={1}
+                  title="Select contracted repair specialist or OEM workshop"
                   value={repairVendorId}
                   onChange={(e) => setRepairVendorId(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
                 >
                   <option value="">-- Select Repair Vendor --</option>
                   {vendors.map((v) => (
@@ -723,10 +730,12 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
                 <textarea
                   rows={2}
                   required
+                  tabIndex={2}
+                  title="Detailed symptoms, error codes, and maintenance instructions"
                   placeholder="e.g. Spindle bearing vibration anomaly under high RPM. Requires recalibration and seal replacement."
                   value={issueDescription}
                   onChange={(e) => setIssueDescription(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
                 />
               </div>
 
@@ -735,9 +744,11 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
                   <label className="block font-bold text-slate-700 mb-1">Expected Return Date</label>
                   <input
                     type="date"
+                    tabIndex={3}
+                    title="Estimated date asset will be returned repaired"
                     value={expectedReturnDate}
                     onChange={(e) => setExpectedReturnDate(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
                   />
                 </div>
                 <div>
@@ -745,9 +756,11 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
                   <input
                     type="number"
                     step="any"
+                    tabIndex={4}
+                    title="Initial cost quotation provided by vendor"
                     value={repairCost}
                     onChange={(e) => setRepairCost(e.target.value)}
-                    className="w-full px-3 py-2 font-mono border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white"
+                    className="w-full px-3 py-2 font-mono border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
                   />
                 </div>
               </div>
@@ -756,9 +769,11 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Repair Status</label>
                   <select
+                    tabIndex={5}
+                    title="Current lifecycle status of repair ticket"
                     value={repairStatus}
                     onChange={(e) => setRepairStatus(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white font-semibold"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white font-semibold"
                   >
                     <option value="sent_to_vendor">Sent to Vendor (In Progress)</option>
                     <option value="repaired">Repaired & Completed</option>
@@ -770,6 +785,8 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
               <div className="pt-2 flex justify-end gap-2">
                 <button
                   type="button"
+                  tabIndex={6}
+                  title="Cancel dispatch dialog"
                   onClick={() => setIsSendRepairOpen(false)}
                   className="px-4 py-2 font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
                 >
@@ -777,8 +794,10 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
                 </button>
                 <button
                   type="submit"
+                  tabIndex={7}
                   disabled={submitting}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-md shadow-indigo-600/20 disabled:opacity-50 cursor-pointer"
+                  title="Submit repair requisition and mark asset as In Repair"
+                  className="px-5 py-2 bg-gradient-to-r from-[#FF8C00] to-[#FF4500] hover:from-[#FF8C00] hover:to-[#e03e00] text-white font-bold rounded-xl shadow-md disabled:opacity-50 cursor-pointer"
                 >
                   {submitting ? 'Dispatching...' : editingRepair ? 'Save Changes' : 'Dispatch Asset'}
                 </button>
@@ -818,6 +837,8 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
+                    tabIndex={1}
+                    title="Asset successfully repaired and ready to return to stock"
                     onClick={() => setReturnStatus('repaired')}
                     className={`py-2 px-3 rounded-lg font-bold border transition cursor-pointer ${
                       returnStatus === 'repaired'
@@ -829,6 +850,8 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
                   </button>
                   <button
                     type="button"
+                    tabIndex={2}
+                    title="Asset deemed unrepairable and must be decommissioned"
                     onClick={() => setReturnStatus('unrepairable_trashed')}
                     className={`py-2 px-3 rounded-lg font-bold border transition cursor-pointer ${
                       returnStatus === 'unrepairable_trashed'
@@ -846,9 +869,11 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
                 <input
                   type="number"
                   step="any"
+                  tabIndex={3}
+                  title="Final billed repair invoice amount"
                   value={finalCost}
                   onChange={(e) => setFinalCost(e.target.value)}
-                  className="w-full px-3 py-2 font-mono border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white"
+                  className="w-full px-3 py-2 font-mono border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
                 />
               </div>
 
@@ -856,16 +881,20 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
                 <label className="block font-bold text-slate-700 mb-1">Manager Closeout Remark</label>
                 <textarea
                   rows={2}
+                  tabIndex={4}
+                  title="Closeout QA notes or testing certificate reference"
                   placeholder="e.g. Verified tolerances and calibration certificate. Passed QA testing."
                   value={resolutionNotes}
                   onChange={(e) => setResolutionNotes(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 bg-white"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
                 />
               </div>
 
               <div className="pt-2 flex justify-end gap-2">
                 <button
                   type="button"
+                  tabIndex={5}
+                  title="Cancel resolution dialog"
                   onClick={() => setSelectedReturnRepair(null)}
                   className="px-4 py-2 font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
                 >
@@ -873,8 +902,10 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
                 </button>
                 <button
                   type="submit"
+                  tabIndex={6}
                   disabled={submitting}
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl shadow-md shadow-indigo-600/20 disabled:opacity-50 cursor-pointer"
+                  title="Update repair ticket and return asset to active inventory"
+                  className="px-5 py-2 bg-gradient-to-r from-[#FF8C00] to-[#FF4500] hover:from-[#FF8C00] hover:to-[#e03e00] text-white font-bold rounded-xl shadow-md disabled:opacity-50 cursor-pointer"
                 >
                   {submitting ? 'Closing Ticket...' : 'Save & Update Asset Status'}
                 </button>
@@ -908,10 +939,12 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
                 <input
                   type="text"
                   required
+                  tabIndex={1}
+                  title="Official business or corporate name of vendor"
                   placeholder="e.g. Precision Machine Tooling Ltd."
                   value={vendorName}
                   onChange={(e) => setVendorName(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
                 />
               </div>
 
@@ -920,9 +953,11 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
                 <label className="block font-bold text-slate-700 mb-1">Origin / Creator Branch</label>
                 {isAdminOrSuper ? (
                   <select
+                    tabIndex={2}
+                    title="Primary originating branch for this vendor"
                     value={vendorBranchId}
                     onChange={(e) => setVendorBranchId(e.target.value ? Number(e.target.value) : '')}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white font-semibold"
                   >
                     {branches.map((b) => (
                       <option key={b.id} value={b.id}>
@@ -941,10 +976,12 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
                 <label className="block font-bold text-slate-700 mb-1">Contact Person</label>
                 <input
                   type="text"
+                  tabIndex={3}
+                  title="Primary account manager, service representative, or point of contact"
                   placeholder="e.g. Marcus Vance"
                   value={contactPerson}
                   onChange={(e) => setContactPerson(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
                 />
               </div>
 
@@ -953,20 +990,24 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
                   <label className="block font-bold text-slate-700 mb-1">Phone</label>
                   <input
                     type="text"
+                    tabIndex={4}
+                    title="Vendor direct phone or customer hotline"
                     placeholder="+44 20 7946 0991"
                     value={vendorPhone}
                     onChange={(e) => setVendorPhone(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
                   />
                 </div>
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Email</label>
                   <input
                     type="email"
+                    tabIndex={5}
+                    title="Vendor service or billing email address"
                     placeholder="support@vendor.com"
                     value={vendorEmail}
                     onChange={(e) => setVendorEmail(e.target.value)}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
                   />
                 </div>
               </div>
@@ -975,19 +1016,23 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
                 <label className="block font-bold text-slate-700 mb-1">Address / Facility</label>
                 <input
                   type="text"
+                  tabIndex={6}
+                  title="Physical depot, plant, or mailing address"
                   placeholder="Street address or industrial park..."
                   value={vendorAddress}
                   onChange={(e) => setVendorAddress(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
                 />
               </div>
 
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Service Type</label>
                 <select
+                  tabIndex={7}
+                  title="Designation of vendor capabilities and service scope"
                   value={serviceType}
                   onChange={(e) => setServiceType(e.target.value as any)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-blue-500 bg-white"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
                 >
                   <option value="supplier_and_repair">Supplier & Repair Contractor</option>
                   <option value="repair">Maintenance / Repair Specialist Only</option>
@@ -1009,6 +1054,7 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
                         return (
                           <label
                             key={branch.id}
+                            title={`Authorize ${branch.name} to view and dispatch with this vendor`}
                             className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-50 cursor-pointer"
                           >
                             <input
@@ -1021,7 +1067,7 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
                                   setAssignedBranchIds(assignedBranchIds.filter((id) => id !== branch.id));
                                 }
                               }}
-                              className="rounded text-blue-600 focus:ring-blue-500"
+                              className="rounded text-[#FF8C00] focus:ring-[#FF8C00]"
                             />
                             <span className="text-slate-700 font-medium">{branch.name}</span>
                           </label>
@@ -1034,6 +1080,8 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
               <div className="pt-2 flex justify-end gap-2">
                 <button
                   type="button"
+                  tabIndex={8}
+                  title="Cancel vendor registration dialog"
                   onClick={() => setIsAddVendorOpen(false)}
                   className="px-4 py-2 font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
                 >
@@ -1041,8 +1089,10 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
                 </button>
                 <button
                   type="submit"
+                  tabIndex={9}
                   disabled={submitting}
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl shadow-md disabled:opacity-50 cursor-pointer"
+                  title="Save vendor details to directory"
+                  className="px-5 py-2 bg-gradient-to-r from-[#FF8C00] to-[#FF4500] hover:from-[#FF8C00] hover:to-[#e03e00] text-white font-bold rounded-xl shadow-md disabled:opacity-50 cursor-pointer"
                 >
                   {editingVendor ? 'Update Vendor' : 'Save Vendor'}
                 </button>
