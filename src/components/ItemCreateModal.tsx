@@ -171,8 +171,8 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
       await fetchApi('/api/inventory', {
         method: 'POST',
         body: JSON.stringify({
-          name,
-          code,
+          name: name.trim(),
+          code: code.trim().toUpperCase(),
           itemType,
           imageUrl: imageUrl.trim() || null,
           categoryId: Number(categoryId),
@@ -317,7 +317,7 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
                   title="Unique asset barcode, tag identifier, or inventory SKU"
                   placeholder="e.g. AST-CNC-501 or CON-LUB-009"
                   value={code}
-                  onChange={(e) => setCode(e.target.value)}
+                  onChange={(e) => setCode(e.target.value.toUpperCase())}
                   className="w-full px-3.5 py-2 text-xs font-mono border border-slate-300 rounded-lg focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] focus:outline-none bg-white uppercase"
                 />
               </div>
@@ -606,8 +606,11 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
                   tabIndex={13}
                   title="Select operational department within branch"
                   value={selectedDepartmentId}
-                  onChange={(e) => setSelectedDepartmentId(e.target.value ? Number(e.target.value) : '')}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none bg-white"
+                  onChange={(e) => {
+                    setSelectedDepartmentId(e.target.value ? Number(e.target.value) : '');
+                    setSelectedLocationId('');
+                  }}
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none bg-white font-medium"
                 >
                   <option value="">-- General Branch Storage --</option>
                   {departments.map((d) => (
@@ -619,24 +622,28 @@ export const ItemCreateModal: React.FC<ItemCreateModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1">Storage Sublocation / Rack</label>
+                <label className="block text-xs font-bold text-slate-800 mb-1">
+                  Storage Sublocation / Rack <span className="text-slate-400 font-normal">(Filtered by Dept)</span>
+                </label>
                 <select
                   tabIndex={14}
                   title="Specific shelf, bay, room, or rack sublocation"
                   value={selectedLocationId}
                   onChange={(e) => setSelectedLocationId(e.target.value ? Number(e.target.value) : '')}
-                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none bg-white"
+                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none bg-white font-medium"
                 >
                   <option value="">-- Direct Department Area --</option>
-                  {locations.map((loc) => {
-                    const parent = loc.parentLocationId ? locations.find((l) => l.id === loc.parentLocationId) : null;
-                    const displayName = parent ? `${parent.name}/${loc.name}` : loc.name;
-                    return (
-                      <option key={loc.id} value={loc.id}>
-                        {displayName} ({loc.type})
-                      </option>
-                    );
-                  })}
+                  {locations
+                    .filter((loc) => !selectedDepartmentId || loc.departmentId === Number(selectedDepartmentId) || !loc.departmentId)
+                    .map((loc) => {
+                      const parent = loc.parentLocationId ? locations.find((l) => l.id === loc.parentLocationId) : null;
+                      const displayName = parent ? `${parent.name}/${loc.name}` : loc.name;
+                      return (
+                        <option key={loc.id} value={loc.id}>
+                          {displayName} ({loc.type})
+                        </option>
+                      );
+                    })}
                 </select>
               </div>
             </div>

@@ -1833,6 +1833,10 @@ async function startServer() {
       const locMap = new Map(allLocations.map(l => [l.id, l]));
       const allMachines = await db.select().from(machines);
       const machMap = new Map(allMachines.map(m => [m.id, m]));
+      const allBranches = await db.select().from(branches);
+      const bMap = new Map(allBranches.map(b => [b.id, b]));
+      const activeRepairsList = await db.select().from(vendorRepairs).where(eq(vendorRepairs.status, 'sent_to_vendor'));
+      const activeRepairItemMap = new Map(activeRepairsList.map(r => [r.itemId, r]));
 
       // Function to format hierarchical location (e.g. Cupboard/Shelf1)
       const formatLocationName = (locId: number | null) => {
@@ -1851,6 +1855,7 @@ async function startServer() {
         const rawLocs = allStockLocs.filter(l => l.itemId === item.id);
         const locs = rawLocs.map(sl => ({
           ...sl,
+          branch: bMap.get(sl.branchId) || null,
           department: sl.departmentId ? deptMap.get(sl.departmentId) || null : null,
           location: sl.locationId ? {
             ...locMap.get(sl.locationId),
@@ -1877,8 +1882,12 @@ async function startServer() {
           isLow = item.availableQuantity <= item.minThreshold;
         }
 
+        const activeRepairTicket = activeRepairItemMap.get(item.id);
+        const effectiveStatus = activeRepairTicket ? 'in_repair' : item.status;
+
         return {
           ...item,
+          status: effectiveStatus,
           minThreshold: effectiveThreshold,
           branchQuantity: targetBranch ? branchQty : item.availableQuantity,
           category: catMap.get(item.categoryId),
@@ -1889,14 +1898,25 @@ async function startServer() {
         };
       });
 
-      // If a specific branch is selected, filter to items with available stock in that branch
+      // If a specific branch is selected, filter to items with available stock in that branch or in repair
       if (targetBranch && all !== 'true') {
-        enriched = enriched.filter(item => (item.branchQuantity || 0) > 0 && item.status !== 'trashed');
+        enriched = enriched.filter(item => {
+          if (item.status === 'trashed') return false;
+          if ((item.branchQuantity || 0) > 0) return true;
+          // Items in repair belonging to this branch should be visible in assets list
+          if (item.status === 'in_repair') {
+            const rawLocs = allStockLocs.filter(l => l.itemId === item.id);
+            if (rawLocs.some(l => l.branchId === targetBranch)) return true;
+            const activeRepair = activeRepairItemMap.get(item.id);
+            if (activeRepair && activeRepair.branchId === targetBranch) return true;
+          }
+          return false;
+        });
       }
 
-      // Department login: only items with available stock > 0 and not trashed
+      // Department login: only items with available stock > 0 and not trashed (or in repair)
       if (req.user?.role === 'department') {
-        enriched = enriched.filter(item => (item.branchQuantity || 0) > 0 && item.status !== 'trashed');
+        enriched = enriched.filter(item => ((item.branchQuantity || 0) > 0 || item.status === 'in_repair') && item.status !== 'trashed');
       }
 
       res.json(enriched);
@@ -1931,6 +1951,14 @@ async function startServer() {
         return res.status(400).json({ error: 'Code, name, itemType, category, and UOM are required' });
       }
 
+      const finalCode = (code || '').trim().toUpperCase();
+
+      // Check for duplicate SKU code (all caps, unique)
+      const existing = await db.select().from(inventoryItems).where(eq(inventoryItems.code, finalCode));
+      if (existing.length > 0) {
+        return res.status(400).json({ error: `SKU / Item Code "${finalCode}" already exists. Duplicate SKUs are not allowed.` });
+      }
+
       // Assets always have quantity = 1; Consumables can have multiple quantities
       const isAsset = itemType === 'asset';
       const qty = isAsset ? 1 : (parseFloat(quantity) || 1);
@@ -1950,11 +1978,11 @@ async function startServer() {
         }
       }
 
-      const bId = branchId ? parseInt(branchId) : (req.user?.branchId || 1);
+      const bId = branchId ? parseInt(branchId) : (req.user?.branchId || 12);
 
       const [created] = await db.insert(inventoryItems).values({
-        code,
-        name,
+        code: finalCode,
+        name: name.trim(),
         itemType,
         categoryId: parseInt(categoryId),
         modelId: modelId ? parseInt(modelId) : null,
@@ -1964,7 +1992,7 @@ async function startServer() {
         availableQuantity: qty,
         minThreshold: threshold,
         recordDate: recordDate || new Date().toISOString().split('T')[0],
-        status: qty <= threshold ? 'low_stock' : 'available',
+        status: 'available',
         customFieldsData: customFieldsData || {},
         imageUrl: imageUrl || null,
         notes: notes || null,
@@ -1981,7 +2009,7 @@ async function startServer() {
         quantity: qty,
       });
 
-      await logEntry(req, 'CREATE_INVENTORY_ITEM', 'inventory', created.id, `Created ${itemType}: ${name} (${code}) with ${qty} ${uom}`, bId);
+      await logEntry(req, 'CREATE_INVENTORY_ITEM', 'inventory', created.id, `Created ${itemType}: ${name} (${finalCode}) with ${qty} ${uom}`, bId);
       res.json(created);
     } catch (error: any) {
       console.error('Error creating inventory item:', error);
@@ -2010,10 +2038,24 @@ async function startServer() {
         status,
       } = req.body;
 
+      const finalCode = code !== undefined ? (code || '').trim().toUpperCase() : undefined;
+
+      // Duplicate check for SKU
+      if (finalCode) {
+        const existing = await db.select().from(inventoryItems).where(eq(inventoryItems.code, finalCode));
+        if (existing.length > 0 && existing[0].id !== id) {
+          return res.status(400).json({ error: `SKU / Item Code "${finalCode}" is already in use by another item. Duplicate SKUs are not allowed.` });
+        }
+      }
+
+      const [existingItem] = await db.select().from(inventoryItems).where(eq(inventoryItems.id, id));
+      if (!existingItem) {
+        return res.status(404).json({ error: 'Item not found' });
+      }
+
       const allowedCatIds = await getPermittedCategoryIdsForUser(req);
       if (allowedCatIds !== null) {
-        const [existing] = await db.select().from(inventoryItems).where(eq(inventoryItems.id, id));
-        if (!existing || !allowedCatIds.includes(existing.categoryId)) {
+        if (!allowedCatIds.includes(existingItem.categoryId)) {
           return res.status(403).json({ error: 'Access Denied: You do not have permission to manage items in this category.' });
         }
         if (categoryId && !allowedCatIds.includes(parseInt(categoryId))) {
@@ -2021,10 +2063,23 @@ async function startServer() {
         }
       }
 
+      // Editing existing item should not allow fieldset values to be edited directly.
+      // Change of model is allowed; if model changes, adopt the new model's fieldset data.
+      let effectiveCustomFieldsData = existingItem.customFieldsData;
+      const targetModelId = modelId !== undefined ? (modelId ? parseInt(modelId) : null) : existingItem.modelId;
+      if (targetModelId !== existingItem.modelId) {
+        if (targetModelId) {
+          const [newModel] = await db.select().from(models).where(eq(models.id, targetModelId));
+          effectiveCustomFieldsData = (newModel?.customFieldsData as Record<string, any>) || {};
+        } else {
+          effectiveCustomFieldsData = {};
+        }
+      }
+
       const [updated] = await db.update(inventoryItems)
         .set({
-          code: code || undefined,
-          name: name || undefined,
+          code: finalCode,
+          name: name ? name.trim() : undefined,
           itemType: itemType || undefined,
           categoryId: categoryId ? parseInt(categoryId) : undefined,
           modelId: modelId !== undefined ? (modelId ? parseInt(modelId) : null) : undefined,
@@ -2034,7 +2089,7 @@ async function startServer() {
           availableQuantity: availableQuantity !== undefined ? parseFloat(availableQuantity) : undefined,
           minThreshold: minThreshold !== undefined ? parseFloat(minThreshold) : undefined,
           recordDate: recordDate || undefined,
-          customFieldsData: customFieldsData !== undefined ? customFieldsData : undefined,
+          customFieldsData: effectiveCustomFieldsData,
           imageUrl: imageUrl !== undefined ? (imageUrl || null) : undefined,
           notes: notes !== undefined ? notes : undefined,
           status: status || undefined,
@@ -2248,7 +2303,14 @@ async function startServer() {
           .where(eq(stockLocations.id, sourceLoc.id));
       }
 
-      const isInterBranch = (movementType === 'branch_to_branch') && (parseInt(fromBranchId) !== parseInt(toBranchId));
+      const fromB = parseInt(String(fromBranchId));
+      const toB = parseInt(String(toBranchId));
+
+      if (movementType === 'branch_to_branch' && fromB === toB) {
+        return res.status(400).json({ error: 'Destination branch must be different from source branch for inter-branch transfers.' });
+      }
+
+      const isInterBranch = (movementType === 'branch_to_branch') && (fromB !== toB);
       const movementStatus = isInterBranch ? 'pending_acceptance' : 'completed';
 
       // For local movements (dept_to_dept, assigned_to_machine, or intra-branch), allocate immediately
@@ -2826,8 +2888,20 @@ async function startServer() {
         return res.status(400).json({ error: 'Item, vendor, and issue description are required' });
       }
 
-      const [item] = await db.select().from(inventoryItems).where(eq(inventoryItems.id, parseInt(itemId)));
-      if (!item) return res.status(404).json({ error: 'Asset not found' });
+      const parsedItemId = parseInt(String(itemId));
+      const parsedVendorId = parseInt(String(vendorId));
+
+      if (isNaN(parsedItemId) || isNaN(parsedVendorId)) {
+        return res.status(400).json({ error: 'Invalid Item ID or Vendor ID' });
+      }
+
+      const [item] = await db.select().from(inventoryItems).where(eq(inventoryItems.id, parsedItemId));
+      if (!item) return res.status(404).json({ error: 'Target asset was not found' });
+
+      // Check if already in repair
+      if (item.status === 'in_repair') {
+        return res.status(400).json({ error: `Asset "${item.name}" (${item.code}) is already in repair at a vendor.` });
+      }
 
       // Calculate how long asset was engaged before repair
       let engagementMinutes = item.totalEngagementMinutes || 0;
@@ -2838,41 +2912,55 @@ async function startServer() {
         engagementMinutes += diffMinutes;
       }
 
-      const bId = branchId ? parseInt(branchId) : (req.user?.branchId || 1);
+      // Find item's current active stock location with quantity > 0
+      const allItemLocs = await db.select().from(stockLocations).where(eq(stockLocations.itemId, item.id));
+      const activeLoc = allItemLocs.find(l => l.quantity > 0) || allItemLocs[0];
+      const bId = (branchId && !isNaN(parseInt(String(branchId)))) 
+        ? parseInt(String(branchId)) 
+        : (activeLoc?.branchId || req.user?.branchId || 12);
+      const safeBranchId = !isNaN(bId) && bId > 0 ? bId : 12;
 
       const [created] = await db.insert(vendorRepairs).values({
         itemId: item.id,
-        vendorId: parseInt(vendorId),
-        branchId: bId,
+        vendorId: parsedVendorId,
+        branchId: safeBranchId,
         sentDate: sentDate || new Date().toISOString().split('T')[0],
         expectedReturnDate: expectedReturnDate || null,
-        issueDescription,
-        repairCost: repairCost ? parseFloat(repairCost) : 0,
+        issueDescription: String(issueDescription).trim(),
+        repairCost: repairCost ? parseFloat(String(repairCost)) : 0,
         status: 'sent_to_vendor',
         engagedDurationMinutes: engagementMinutes,
-        managerNotes,
+        managerNotes: managerNotes || null,
       }).returning();
 
-      // Update asset status
+      // Update asset status and quantity
       await db.update(inventoryItems).set({
         status: 'in_repair',
-        engagementStatus: 'repaired',
+        availableQuantity: 0,
+        engagementStatus: 'idle',
         totalEngagementMinutes: engagementMinutes,
       }).where(eq(inventoryItems.id, item.id));
+
+      if (activeLoc) {
+        await db.update(stockLocations).set({
+          quantity: Math.max(0, activeLoc.quantity - 1),
+        }).where(eq(stockLocations.id, activeLoc.id));
+      }
 
       // Record movement to vendor
       await db.insert(inventoryMovements).values({
         itemId: item.id,
         quantity: 1,
-        uom: item.uom,
+        uom: item.uom || 'unit',
         movementType: 'sent_to_vendor',
-        fromBranchId: bId,
-        toBranchId: bId,
+        status: 'completed',
+        fromBranchId: safeBranchId,
+        toBranchId: safeBranchId,
         movedByUserId: req.user?.id || 1,
         notes: `Asset sent to vendor for repair: ${issueDescription}. Engaged duration: ${Math.floor(engagementMinutes / 60)}h`,
       });
 
-      await logEntry(req, 'SEND_TO_VENDOR_REPAIR', 'repair', created.id, `Sent ${item.name} (${item.code}) to vendor #${vendorId}. Logged engagement: ${Math.floor(engagementMinutes / 60)} hours`, bId);
+      await logEntry(req, 'SEND_TO_VENDOR_REPAIR', 'repair', created.id, `Sent ${item.name} (${item.code}) to vendor #${parsedVendorId}. Logged engagement: ${Math.floor(engagementMinutes / 60)} hours`, safeBranchId);
       res.json(created);
     } catch (error: any) {
       console.error('Error creating repair record:', error);
@@ -2880,7 +2968,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/repairs/:id/return', authMiddleware, async (req: AuthRequest, res) => {
+  const handleReturnRepair = async (req: AuthRequest, res: any) => {
     try {
       const { id } = req.params;
       const { returnedDate, finalCost, managerNotes, departmentId, locationId } = req.body;
@@ -2898,21 +2986,49 @@ async function startServer() {
       // Put asset back to available status
       await db.update(inventoryItems).set({
         status: 'available',
+        availableQuantity: 1,
         engagementStatus: 'idle',
       }).where(eq(inventoryItems.id, repair.itemId));
 
-      // Update location
+      // Update location or restore stock location
+      const destDept = departmentId ? parseInt(departmentId) : null;
+      const destLoc = locationId ? parseInt(locationId) : null;
+
       const [item] = await db.select().from(inventoryItems).where(eq(inventoryItems.id, repair.itemId));
       if (item) {
+        const destStockLocs = await db.select().from(stockLocations).where(
+          and(
+            eq(stockLocations.itemId, item.id),
+            eq(stockLocations.branchId, repair.branchId),
+            destDept ? eq(stockLocations.departmentId, destDept) : sql`1=1`
+          )
+        );
+
+        if (destStockLocs.length > 0) {
+          await db.update(stockLocations).set({
+            quantity: destStockLocs[0].quantity + 1,
+            locationId: destLoc || destStockLocs[0].locationId,
+          }).where(eq(stockLocations.id, destStockLocs[0].id));
+        } else {
+          await db.insert(stockLocations).values({
+            itemId: item.id,
+            branchId: repair.branchId,
+            departmentId: destDept,
+            locationId: destLoc,
+            quantity: 1,
+          });
+        }
+
         await db.insert(inventoryMovements).values({
           itemId: item.id,
           quantity: 1,
           uom: item.uom,
           movementType: 'returned_from_vendor',
+          status: 'completed',
           fromBranchId: repair.branchId,
           toBranchId: repair.branchId,
-          toDepartmentId: departmentId ? parseInt(departmentId) : null,
-          toLocationId: locationId ? parseInt(locationId) : null,
+          toDepartmentId: destDept,
+          toLocationId: destLoc,
           movedByUserId: req.user?.id || 1,
           notes: `Asset received back repaired from vendor. Cost: $${finalCost || repair.repairCost}`,
         });
@@ -2924,7 +3040,10 @@ async function startServer() {
       console.error('Error returning repaired asset:', error);
       res.status(500).json({ error: error.message || 'Failed to complete repair return' });
     }
-  });
+  };
+
+  app.post('/api/repairs/:id/return', authMiddleware, handleReturnRepair);
+  app.patch('/api/repairs/:id/return', authMiddleware, handleReturnRepair);
 
   app.post('/api/repairs/:id/trash', authMiddleware, async (req: AuthRequest, res) => {
     try {

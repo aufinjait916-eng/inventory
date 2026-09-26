@@ -16,6 +16,7 @@ import {
   Upload,
   Trash2,
   Link as LinkIcon,
+  Lock,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.tsx';
 import { fetchApi } from '../lib/api.ts';
@@ -117,10 +118,13 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
     const selectedModel = models.find((m) => m.id === modelId);
     if (selectedModel && selectedModel.fieldSet) {
       setActiveFieldSet(selectedModel.fieldSet);
+      if (item && selectedModel.id !== item.modelId && selectedModel.customFieldsData) {
+        setCustomFieldsData({ ...selectedModel.customFieldsData });
+      }
     } else {
       setActiveFieldSet(null);
     }
-  }, [modelId, models]);
+  }, [modelId, models, item]);
 
   if (!isOpen || !item) return null;
 
@@ -589,84 +593,57 @@ export const ItemEditModal: React.FC<ItemEditModalProps> = ({
             />
           </div>
 
-          {/* Dynamic Custom Fields Rendering */}
+          {/* Dynamic Custom Fields Rendering - Locked / Read-Only on Existing Item */}
           {activeFieldSet && activeFieldSet.fields && activeFieldSet.fields.length > 0 && (
-            <div className="p-4 bg-amber-50/50 rounded-xl border border-amber-200/70 space-y-3">
-              <div className="flex items-center gap-2">
-                <Layers className="w-4 h-4 text-[#FF8C00]" />
-                <h4 className="font-bold text-amber-950">
-                  Model Specifications ({activeFieldSet.name})
-                </h4>
+            <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-200 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-slate-600" />
+                  <h4 className="font-bold text-slate-800">
+                    Model Specifications: {activeFieldSet.name}
+                  </h4>
+                </div>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-900 border border-amber-200">
+                  <Lock className="w-3 h-3 text-amber-700" />
+                  <span>Field values locked on existing item</span>
+                </span>
               </div>
+              <p className="text-[11px] text-slate-600 font-medium">
+                Fieldset values cannot be directly edited. You can change the Model in the dropdown above to associate a different specification set.
+              </p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {activeFieldSet.fields.map((fld) => (
                   <div key={fld.id}>
                     <label className="block font-bold text-slate-700 mb-1">
-                      {fld.label} {fld.isRequired && <span className="text-red-500">*</span>}
+                      {fld.label}
                     </label>
 
-                    {fld.fieldType === 'text' && (
-                      <input
-                        type="text"
-                        required={fld.isRequired}
-                        title={`Specification field: ${fld.label}`}
-                        value={customFieldsData[fld.name] || ''}
-                        onChange={(e) => handleCustomFieldChange(fld.name, e.target.value)}
-                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-[#FF8C00]"
-                      />
-                    )}
-
-                    {fld.fieldType === 'number' && (
-                      <input
-                        type="number"
-                        step="any"
-                        required={fld.isRequired}
-                        title={`Specification field: ${fld.label}`}
-                        value={customFieldsData[fld.name] || ''}
-                        onChange={(e) => handleCustomFieldChange(fld.name, e.target.value)}
-                        className="w-full px-3 py-1.5 font-mono border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-[#FF8C00]"
-                      />
-                    )}
-
-                    {fld.fieldType === 'dropdown' && (
-                      <select
-                        required={fld.isRequired}
-                        title={`Select ${fld.label}`}
-                        value={customFieldsData[fld.name] || ''}
-                        onChange={(e) => handleCustomFieldChange(fld.name, e.target.value)}
-                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-[#FF8C00]"
-                      >
-                        <option value="">-- Select {fld.label} --</option>
-                        {fld.options?.map((opt, i) => (
-                          <option key={i} value={opt}>
-                            {opt}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-
-                    {fld.fieldType === 'date' && (
-                      <input
-                        type="date"
-                        required={fld.isRequired}
-                        title={`Date specification: ${fld.label}`}
-                        value={customFieldsData[fld.name] || ''}
-                        onChange={(e) => handleCustomFieldChange(fld.name, e.target.value)}
-                        className="w-full px-3 py-1.5 border border-slate-300 rounded-lg bg-white focus:ring-2 focus:ring-[#FF8C00]"
-                      />
-                    )}
-
-                    {fld.fieldType === 'boolean' && (
-                      <label className="flex items-center gap-2 pt-2 cursor-pointer">
+                    {fld.fieldType === 'boolean' ? (
+                      <div className="flex items-center gap-2 py-2 px-3 bg-slate-100 rounded-lg border border-slate-200">
                         <input
                           type="checkbox"
+                          disabled
                           checked={Boolean(customFieldsData[fld.name])}
-                          onChange={(e) => handleCustomFieldChange(fld.name, e.target.checked)}
-                          className="w-4 h-4 text-[#FF8C00] rounded"
+                          className="w-4 h-4 text-slate-400 rounded cursor-not-allowed"
                         />
-                        <span className="font-semibold text-slate-700">Verified / Checked</span>
-                      </label>
+                        <span className="font-semibold text-slate-700 text-xs">
+                          {Boolean(customFieldsData[fld.name]) ? 'Yes / Enabled' : 'No / Disabled'}
+                        </span>
+                      </div>
+                    ) : (
+                      <input
+                        type="text"
+                        readOnly
+                        disabled
+                        title={`Specification field: ${fld.label} (Read-only)`}
+                        value={
+                          customFieldsData[fld.name] !== undefined && customFieldsData[fld.name] !== null && customFieldsData[fld.name] !== ''
+                            ? String(customFieldsData[fld.name])
+                            : '—'
+                        }
+                        className="w-full px-3 py-1.5 border border-slate-200 rounded-lg bg-slate-100 text-slate-700 cursor-not-allowed font-medium select-none"
+                      />
                     )}
                   </div>
                 ))}

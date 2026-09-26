@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Wrench,
   Building,
@@ -75,6 +75,24 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
   const [repairCost, setRepairCost] = useState('0');
   const [repairStatus, setRepairStatus] = useState<string>('sent_to_vendor');
 
+  // Sync initialRepairItem when opened from inventory
+  useEffect(() => {
+    if (initialRepairItem) {
+      setRepairItemId(initialRepairItem.id);
+      setIsSendRepairOpen(true);
+      setAssetItems((prev) => {
+        if (!prev.some((a) => a.id === initialRepairItem.id)) {
+          return [initialRepairItem, ...prev];
+        }
+        return prev;
+      });
+      if (!repairVendorId && vendors.length > 0) {
+        const repairCapable = vendors.find(v => v.serviceType === 'repair' || v.serviceType === 'supplier_and_repair');
+        setRepairVendorId(repairCapable ? repairCapable.id : vendors[0].id);
+      }
+    }
+  }, [initialRepairItem, vendors]);
+
   // Return / Resolution form
   const [returnStatus, setReturnStatus] = useState<'repaired' | 'unrepairable_trashed'>('repaired');
   const [finalCost, setFinalCost] = useState('0');
@@ -91,9 +109,25 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
         fetchApi<InventoryItem[]>(`/api/inventory?branchId=${currentBranchId}&type=asset`),
       ]);
 
-      setVendors(vData || []);
+      const loadedVendors = vData || [];
+      setVendors(loadedVendors);
       setRepairs(rData || []);
-      setAssetItems(invData || []);
+
+      let allAssetItems = invData || [];
+      if (initialRepairItem && !allAssetItems.some((a) => a.id === initialRepairItem.id)) {
+        allAssetItems = [initialRepairItem, ...allAssetItems];
+      }
+      setAssetItems(allAssetItems);
+
+      // Pre-select first repair-capable vendor if not already set
+      if (!repairVendorId && loadedVendors.length > 0) {
+        const repairCapable = loadedVendors.find(v => v.serviceType === 'repair' || v.serviceType === 'supplier_and_repair');
+        if (repairCapable) {
+          setRepairVendorId(repairCapable.id);
+        } else {
+          setRepairVendorId(loadedVendors[0].id);
+        }
+      }
     } catch (err) {
       console.error('Failed to load vendors/repairs:', err);
     } finally {
@@ -200,10 +234,19 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
   };
 
   // Repair Actions
+  const eligibleAssetItems = useMemo(() => {
+    const list = assetItems.filter((a) => a.status !== 'in_repair' && a.status !== 'trashed');
+    if (initialRepairItem && !list.some((a) => a.id === initialRepairItem.id)) {
+      list.unshift(initialRepairItem);
+    }
+    return list;
+  }, [assetItems, initialRepairItem]);
+
   const handleOpenDispatch = () => {
     setEditingRepair(null);
-    setRepairItemId(assetItems[0]?.id || '');
-    setRepairVendorId(vendors[0]?.id || '');
+    setRepairItemId(eligibleAssetItems[0]?.id || '');
+    const repairVendor = vendors.find(v => v.serviceType === 'repair' || v.serviceType === 'supplier_and_repair');
+    setRepairVendorId(repairVendor?.id || vendors[0]?.id || '');
     setIssueDescription('');
     setExpectedReturnDate('');
     setRepairCost('0');
@@ -224,7 +267,7 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
 
   const handleSaveRepair = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!repairItemId || !repairVendorId || !issueDescription) {
+    if (!repairItemId || !repairVendorId || !issueDescription.trim()) {
       showToast('Please select the item, vendor, and describe the issue.', 'error');
       return;
     }
@@ -236,7 +279,7 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
           method: 'PUT',
           body: JSON.stringify({
             vendorId: Number(repairVendorId),
-            issueDescription,
+            issueDescription: issueDescription.trim(),
             expectedReturnDate: expectedReturnDate || null,
             repairCost: parseFloat(repairCost) || 0,
             status: repairStatus,
@@ -244,13 +287,19 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
         });
         showToast(`Repair record #${editingRepair.id} updated!`, 'success');
       } else {
+        const targetItem = assetItems.find((a) => a.id === Number(repairItemId));
+        const effectiveBranchId = targetItem?.stockLocations?.find(sl => sl.quantity > 0)?.branchId
+          || targetItem?.stockLocations?.[0]?.branchId
+          || currentBranchId
+          || 12;
+
         const result = await fetchApi<VendorRepair>('/api/repairs', {
           method: 'POST',
           body: JSON.stringify({
             itemId: Number(repairItemId),
             vendorId: Number(repairVendorId),
-            branchId: currentBranchId,
-            issueDescription,
+            branchId: effectiveBranchId,
+            issueDescription: issueDescription.trim(),
             expectedReturnDate: expectedReturnDate || null,
             repairCost: parseFloat(repairCost) || 0,
           }),
@@ -674,7 +723,7 @@ export const VendorsRepairsView: React.FC<VendorsRepairsViewProps> = ({ initialR
                   </div>
                 ) : (
                   <SearchableItemSelect
-                    items={assetItems}
+                    items={eligibleAssetItems}
                     value={repairItemId}
                     onChange={(val) => setRepairItemId(val)}
                     label="Target Asset for Repair"

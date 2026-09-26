@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Boxes,
   Package,
@@ -16,6 +16,10 @@ import {
   Clock,
   Edit2,
   Trash2,
+  Activity,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { useApp } from '../context/AppContext.tsx';
 import { fetchApi } from '../lib/api.ts';
@@ -41,6 +45,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onOpenTransfer, on
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [uomFilter, setUomFilter] = useState<string>('all');
   const [lowStockOnly, setLowStockOnly] = useState(false);
+  const [groupByModel, setGroupByModel] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+
+  const toggleGroupCollapse = (key: string) => {
+    setCollapsedGroups((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
 
   // Modals & Detail drawers
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -88,9 +98,70 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onOpenTransfer, on
 
   const filteredItems = items.filter((item) => {
     if (uomFilter !== 'all' && item.uom !== uomFilter) return false;
-    if (lowStockOnly && item.availableQuantity > item.minThreshold) return false;
     return true;
   });
+
+  // Group items by Model and calculate low stock at model level
+  const modelGroups = useMemo(() => {
+    const map = new Map<string, {
+      key: string;
+      modelId: number | null;
+      modelName: string;
+      modelNumber: string;
+      manufacturer: string;
+      categoryName: string;
+      minThreshold: number;
+      uom: string;
+      items: InventoryItem[];
+      totalQuantity: number;
+      availableQuantity: number;
+      isLowStock: boolean;
+    }>();
+
+    filteredItems.forEach((item) => {
+      const key = item.modelId ? `model-${item.modelId}` : `nomodel-${item.categoryId || 'none'}`;
+      if (!map.has(key)) {
+        const threshold = item.model?.minThreshold ?? item.minThreshold ?? 5;
+        map.set(key, {
+          key,
+          modelId: item.modelId || null,
+          modelName: item.model?.name || (item.category?.name ? `Generic / Unspecified Model (${item.category.name})` : 'Unassigned Model'),
+          modelNumber: item.model?.modelNumber || 'N/A',
+          manufacturer: item.model?.manufacturer || 'Standard OEM',
+          categoryName: item.category?.name || 'General',
+          minThreshold: threshold,
+          uom: item.uom,
+          items: [],
+          totalQuantity: 0,
+          availableQuantity: 0,
+          isLowStock: false,
+        });
+      }
+      const grp = map.get(key)!;
+      grp.items.push(item);
+      grp.totalQuantity += (item.totalQuantity || item.availableQuantity || 0);
+      grp.availableQuantity += (item.availableQuantity || 0);
+    });
+
+    const list = Array.from(map.values());
+    list.forEach((g) => {
+      // The low stock information should only be shown when grouped by item model by checking the total quantity in the item model is less than the low stock threshold
+      g.isLowStock = g.totalQuantity < g.minThreshold;
+    });
+
+    if (lowStockOnly) {
+      return list.filter((g) => g.isLowStock);
+    }
+
+    return list;
+  }, [filteredItems, lowStockOnly]);
+
+  const displayedFlatItems = useMemo(() => {
+    if (!lowStockOnly) return filteredItems;
+    // When lowStockOnly is toggled, filter to items whose model has low stock
+    const lowStockModelIds = new Set(modelGroups.filter((g) => g.isLowStock).map((g) => g.modelId));
+    return filteredItems.filter((item) => lowStockModelIds.has(item.modelId || null));
+  }, [filteredItems, lowStockOnly, modelGroups]);
 
   const handleDeleteItem = async () => {
     if (!deleteItemModal.item) return;
@@ -103,6 +174,211 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onOpenTransfer, on
     } catch (err: any) {
       showToast(err.message || 'Failed to delete inventory record', 'error');
     }
+  };
+
+  const renderItemRow = (item: InventoryItem) => {
+    // Prioritize stock location with quantity > 0 (e.g. Destination branch after transfer)
+    const activeLoc = item.stockLocations?.find((sl) => sl.quantity > 0) || item.stockLocations?.[0];
+    const bName = activeLoc?.branch?.name || branches.find((b) => b.id === activeLoc?.branchId)?.name || 'Central Campus';
+    const dName = activeLoc?.department?.name || (activeLoc?.departmentId ? `Dept #${activeLoc.departmentId}` : 'Main Store');
+    const lName = (activeLoc?.location as any)?.formattedName || activeLoc?.location?.name || 'Main Bin';
+
+    return (
+      <tr key={item.id} className="hover:bg-slate-50/80 transition">
+        {/* Code / SKU */}
+        <td className="py-3 px-4">
+          <div className="flex items-center gap-2.5">
+            {item.imageUrl ? (
+              <img
+                src={item.imageUrl}
+                alt={item.name}
+                referrerPolicy="no-referrer"
+                className="w-8 h-8 rounded-lg object-cover border border-slate-200 shrink-0"
+              />
+            ) : (
+              <div
+                className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border ${
+                  item.itemType === 'asset'
+                    ? 'bg-blue-50 text-blue-700 border-blue-200'
+                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                }`}
+              >
+                {item.itemType === 'asset' ? <Boxes className="w-4 h-4" /> : <Package className="w-4 h-4" />}
+              </div>
+            )}
+            <div>
+              <span className="font-mono font-bold text-xs text-slate-900 uppercase block tracking-wider">
+                {item.code}
+              </span>
+              <span className="text-[10px] uppercase font-semibold text-slate-500 block">
+                {item.itemType === 'asset' ? 'Capital Asset' : 'Consumable'}
+              </span>
+            </div>
+          </div>
+        </td>
+
+        {/* Name & Model */}
+        <td className="py-3 px-4">
+          <div className="space-y-0.5">
+            <button
+              onClick={() => setSelectedItemDetail(item)}
+              className="font-bold text-slate-900 text-xs hover:text-amber-800 text-left transition cursor-pointer"
+            >
+              {item.name}
+            </button>
+            <div className="flex items-center gap-1.5 flex-wrap text-[11px] text-slate-600 font-medium">
+              {item.model?.name && (
+                <span className="text-slate-800 font-semibold">{item.model.name}</span>
+              )}
+              {item.model?.modelNumber && item.model.modelNumber !== 'N/A' && (
+                <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 font-medium">
+                  {item.model.modelNumber}
+                </span>
+              )}
+            </div>
+          </div>
+        </td>
+
+        {/* Category */}
+        <td className="py-3 px-4">
+          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-slate-100 text-slate-800 border border-slate-200">
+            {item.category?.name || 'General'}
+          </span>
+        </td>
+
+        {/* Location / Sublocation */}
+        <td className="py-3 px-4">
+          <div className="space-y-0.5 text-xs">
+            <div className="flex items-center gap-1 font-semibold text-slate-800">
+              <Building className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+              <span>{bName}</span>
+            </div>
+            <div className="text-[11px] text-slate-600 font-medium">
+              <span>{dName}</span>
+              <span className="mx-1">•</span>
+              <span className="text-slate-700">{lName}</span>
+            </div>
+          </div>
+        </td>
+
+        {/* Available Quantity & UOM */}
+        <td className="py-3 px-4">
+          <div className="flex items-baseline gap-1 font-mono">
+            <span className="font-bold text-sm text-slate-900">
+              {item.availableQuantity ?? item.totalQuantity}
+            </span>
+            <span className="text-[10px] uppercase font-bold text-slate-600">{item.uom}</span>
+          </div>
+          {item.totalQuantity !== undefined && item.totalQuantity !== item.availableQuantity && (
+            <span className="text-[10px] text-slate-500 font-medium block">
+              Total: {item.totalQuantity} {item.uom}
+            </span>
+          )}
+        </td>
+
+        {/* Status: In repair, in use, available, trashed (Low stock only shown when grouped by model) */}
+        <td className="py-3 px-4">
+          {item.status === 'in_repair' ? (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-950 border border-amber-300">
+              <Wrench className="w-3 h-3 text-amber-700" />
+              <span>In Repair</span>
+            </span>
+          ) : item.status === 'trashed' ? (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-900 border border-rose-200">
+              <Trash2 className="w-3 h-3 text-rose-600" />
+              <span>Decommissioned</span>
+            </span>
+          ) : item.status === 'in_use' ? (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-900 border border-blue-200">
+              <Activity className="w-3 h-3 text-blue-700" />
+              <span>In Use</span>
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-900 border border-emerald-200">
+              <CheckCircle2 className="w-3 h-3 text-emerald-700" />
+              <span>Available</span>
+            </span>
+          )}
+        </td>
+
+        {/* Engagement */}
+        <td className="py-3 px-4">
+          {item.itemType === 'asset' ? (
+            <div className="space-y-0.5 text-[11px]">
+              <div className="flex items-center gap-1 text-slate-700 font-medium">
+                <Clock className="w-3 h-3 text-slate-500" />
+                <span>{Math.floor((item.totalEngagementMinutes || 0) / 60)} hrs active</span>
+              </div>
+              <span className="text-[10px] text-slate-500 capitalize">
+                State: {item.engagementStatus || 'idle'}
+              </span>
+            </div>
+          ) : (
+            <span className="text-slate-400 text-xs">—</span>
+          )}
+        </td>
+
+        {/* Actions */}
+        <td className="py-3 px-4 text-right">
+          <div className="flex items-center justify-end gap-1">
+            <button
+              onClick={() => setSelectedItemDetail(item)}
+              title="View Specifications & Custom Fields"
+              className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+            >
+              <Eye className="w-4 h-4" />
+            </button>
+
+            {/* Transfer / Movement button */}
+            {onOpenTransfer && item.status !== 'trashed' && item.status !== 'in_repair' && (
+              <button
+                onClick={() => onOpenTransfer(item)}
+                title="Transfer / Relocate Stock"
+                className="p-1.5 text-amber-700 hover:text-amber-900 hover:bg-amber-50 rounded-lg transition cursor-pointer"
+              >
+                <ArrowRightLeft className="w-4 h-4" />
+              </button>
+            )}
+
+            {/* Repair button for Capital Assets */}
+            {item.itemType === 'asset' && onOpenRepair && item.status !== 'trashed' && (
+              <button
+                onClick={() => onOpenRepair(item)}
+                disabled={item.status === 'in_repair'}
+                title={item.status === 'in_repair' ? 'Item is currently in repair at vendor' : 'Dispatch for Vendor Repair'}
+                className={`p-1.5 rounded-lg transition ${
+                  item.status === 'in_repair'
+                    ? 'text-slate-300 cursor-not-allowed'
+                    : 'text-indigo-600 hover:text-indigo-900 hover:bg-indigo-50 cursor-pointer'
+                }`}
+              >
+                <Wrench className="w-4 h-4" />
+              </button>
+            )}
+
+            {/* Admin / Manager actions */}
+            {(currentRole === 'admin' || currentRole === 'super_manager') && (
+              <>
+                <button
+                  onClick={() => setEditingItem(item)}
+                  title="Edit Item Specs / Model"
+                  className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+                >
+                  <Edit2 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setDeleteItemModal({ isOpen: true, item })}
+                  title="Delete Item Record"
+                  className="p-1.5 text-rose-600 hover:text-rose-900 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </>
+            )}
+          </div>
+        </td>
+      </tr>
+    );
   };
 
   return (
@@ -207,6 +483,20 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onOpenTransfer, on
           ))}
         </select>
 
+        {/* Group by Model Toggle */}
+        <button
+          onClick={() => setGroupByModel(!groupByModel)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition border cursor-pointer ${
+            groupByModel
+              ? 'bg-amber-100 text-amber-950 border-amber-400 shadow-2xs'
+              : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200/70'
+          }`}
+          title="Group items by their equipment model template"
+        >
+          <Layers className="w-3.5 h-3.5 text-amber-700" />
+          <span>Group by Item Model</span>
+        </button>
+
         {/* Low Stock Warning Filter */}
         <button
           onClick={() => setLowStockOnly(!lowStockOnly)}
@@ -221,240 +511,175 @@ export const InventoryView: React.FC<InventoryViewProps> = ({ onOpenTransfer, on
         </button>
       </div>
 
-      {/* Items Table */}
-      <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-800">
-            <thead className="bg-slate-100 text-slate-700 uppercase text-[10px] font-bold border-b border-slate-200 tracking-wider">
-              <tr>
-                <th className="py-2.5 px-4">Code / SKU</th>
-                <th className="py-2.5 px-4">Name & Model</th>
-                <th className="py-2.5 px-4">Category</th>
-                <th className="py-2.5 px-4">Location / Sublocation</th>
-                <th className="py-2.5 px-4">Available Quantity & UOM</th>
-                <th className="py-2.5 px-4">Status & Health</th>
-                <th className="py-2.5 px-4">Engagement / Lifetime</th>
-                <th className="py-2.5 px-4 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {loading ? (
-                <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-600 font-medium">
-                    Loading stock records from PostgreSQL...
-                  </td>
-                </tr>
-              ) : filteredItems.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-600">
-                    <Boxes className="w-8 h-8 mx-auto text-slate-400 mb-2" />
-                    <p className="font-semibold text-slate-800">No inventory items matched your filter criteria.</p>
-                    <p className="text-xs text-slate-600 mt-1">Try resetting filters or click "+ Add Asset / Consumable".</p>
-                  </td>
-                </tr>
-              ) : (
-                filteredItems.map((item) => {
-                  const isLow = item.availableQuantity <= item.minThreshold;
-                  const hoursEngaged = Math.floor((item.totalEngagementMinutes || 0) / 60);
+      {/* Render View: Grouped by Model OR Flat List */}
+      {groupByModel ? (
+        /* Model Grouped View */
+        <div className="space-y-4">
+          {loading ? (
+            <div className="bg-white rounded-xl border border-slate-200 p-8 text-center text-slate-600 font-medium">
+              Loading model groups from PostgreSQL...
+            </div>
+          ) : modelGroups.length === 0 ? (
+            <div className="bg-white rounded-xl border border-slate-200 p-12 text-center text-slate-600">
+              <Boxes className="w-8 h-8 mx-auto text-slate-400 mb-2" />
+              <p className="font-semibold text-slate-800">No models matched your filter criteria.</p>
+              <p className="text-xs text-slate-600 mt-1">Try resetting filters or click "+ Add Asset / Consumable".</p>
+            </div>
+          ) : (
+            modelGroups.map((group) => {
+              const isCollapsed = Boolean(collapsedGroups[group.key]);
 
-                  // Extract location tags
-                  const branchStockLocs = (item.stockLocations || []).filter(
-                    (sl) => !currentBranchId || sl.branchId === currentBranchId
-                  );
-
-                  return (
-                    <tr key={item.id} className="hover:bg-slate-50/80 transition">
-                      <td className="py-3 px-4 whitespace-nowrap">
-                        <span className="font-mono text-xs font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-300">
-                          {item.code}
-                        </span>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-3">
-                          {item.imageUrl ? (
-                            <img
-                              src={item.imageUrl}
-                              alt={item.name}
-                              referrerPolicy="no-referrer"
-                              className="w-9 h-9 rounded-lg object-cover border border-slate-300 shrink-0 bg-slate-50"
-                              onError={(e) => {
-                                (e.target as HTMLElement).style.display = 'none';
-                              }}
-                            />
-                          ) : (
-                            <div
-                              className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                                item.itemType === 'asset'
-                                  ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                                  : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                              }`}
-                            >
-                              {item.itemType === 'asset' ? (
-                                <Boxes className="w-4 h-4" />
-                              ) : (
-                                <Package className="w-4 h-4" />
-                              )}
-                            </div>
-                          )}
-                          <div>
-                            <p className="font-semibold text-slate-900">{item.name}</p>
-                            {item.model && (
-                              <p className="text-[11px] text-slate-600 font-medium">
-                                Model: <span className="text-slate-800 font-semibold">{item.model.name}</span>
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        <span className="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-800 border border-slate-300">
-                          {item.category?.name || 'General'}
-                        </span>
-                      </td>
-
-                      <td className="py-3 px-4">
-                        {branchStockLocs.length > 0 ? (
-                          <div className="space-y-1">
-                            {branchStockLocs.slice(0, 2).map((sl, idx) => (
-                              <div key={idx} className="flex items-center gap-1.5 text-[11px]">
-                                <Building className="w-3 h-3 text-slate-500 shrink-0" />
-                                <span className="font-semibold text-slate-800">
-                                  {sl.department?.name || 'General'}:
-                                </span>
-                                <span className="text-slate-700 truncate max-w-[140px] font-medium" title={sl.location?.formattedName || sl.location?.name || 'Direct Area'}>
-                                  {sl.location?.formattedName || sl.location?.name || 'Direct Area'}
-                                </span>
-                                {sl.quantity > 0 && (
-                                  <span className="text-[10px] font-mono font-bold text-slate-800 bg-slate-200/80 px-1 py-0.2 rounded shrink-0">
-                                    {sl.quantity}
-                                  </span>
-                                )}
-                              </div>
-                            ))}
-                            {branchStockLocs.length > 2 && (
-                              <span className="text-[10px] text-slate-600 font-medium">
-                                +{branchStockLocs.length - 2} more locations
-                              </span>
-                            )}
-                          </div>
+              return (
+                <div
+                  key={group.key}
+                  className={`bg-white rounded-2xl border transition-all overflow-hidden shadow-2xs ${
+                    group.isLowStock
+                      ? 'border-amber-300/80 ring-1 ring-amber-300/40'
+                      : 'border-slate-200/90'
+                  }`}
+                >
+                  {/* Model Group Header */}
+                  <div
+                    onClick={() => toggleGroupCollapse(group.key)}
+                    className={`p-4 flex flex-wrap items-center justify-between gap-3 cursor-pointer select-none transition ${
+                      group.isLowStock
+                        ? 'bg-gradient-to-r from-amber-50/70 to-white hover:bg-amber-50'
+                        : 'bg-slate-50/70 hover:bg-slate-100/70'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="p-1 rounded-md text-slate-500 hover:text-slate-800 hover:bg-slate-200/60">
+                        {isCollapsed ? (
+                          <ChevronRight className="w-4 h-4" />
                         ) : (
-                          <span className="text-slate-600 text-[11px] font-medium">General Storage</span>
+                          <ChevronDown className="w-4 h-4" />
                         )}
-                      </td>
+                      </div>
 
-                      <td className="py-3 px-4">
-                        <div className="flex items-baseline gap-1.5">
+                      <div className="p-2 rounded-xl bg-amber-100 text-amber-800 border border-amber-300 shrink-0">
+                        <Layers className="w-4 h-4" />
+                      </div>
+
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="font-bold text-slate-900 text-sm">{group.modelName}</h3>
+                          {group.modelNumber !== 'N/A' && (
+                            <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-slate-200/70 text-slate-800 font-semibold">
+                              {group.modelNumber}
+                            </span>
+                          )}
+                          <span className="text-[11px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 font-medium">
+                            {group.categoryName}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-600 font-medium mt-0.5">
+                          Manufacturer: <span className="text-slate-800 font-semibold">{group.manufacturer}</span> •{' '}
+                          <span className="font-semibold text-slate-800">{group.items.length}</span> SKU records assigned
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Stock Metrics & Low Stock Indicator */}
+                    <div className="flex items-center gap-4 flex-wrap">
+                      <div className="text-right">
+                        <div className="flex items-baseline gap-1 justify-end">
+                          <span className="text-[11px] text-slate-600 font-medium">Total Model Stock:</span>
                           <span
-                            className={`font-mono text-sm font-bold ${
-                              isLow ? 'text-amber-900' : 'text-slate-900'
+                            className={`font-mono font-bold text-sm ${
+                              group.isLowStock ? 'text-amber-900' : 'text-slate-900'
                             }`}
                           >
-                            {item.availableQuantity}
+                            {group.totalQuantity}
                           </span>
-                          <span className="font-semibold text-slate-600 text-[11px] uppercase">{item.uom}</span>
+                          <span className="text-[10px] uppercase font-bold text-slate-600">{group.uom}</span>
                         </div>
-                        <span className="text-[10px] text-slate-600 font-medium">Total: {item.totalQuantity} {item.uom}</span>
-                      </td>
+                        <span className="text-[10px] text-slate-500 font-medium">
+                          Threshold: ≤{group.minThreshold} {group.uom}
+                        </span>
+                      </div>
 
-                      <td className="py-3 px-4">
-                        {isLow ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-900 border border-amber-300">
-                            <AlertTriangle className="w-3 h-3" />
-                            Low Stock (≤{item.minThreshold})
-                          </span>
-                        ) : item.status === 'in_repair' ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-100 text-indigo-900 border border-indigo-300">
-                            <Wrench className="w-3 h-3" />
-                            In Repair
-                          </span>
-                        ) : item.status === 'trashed' ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-100 text-rose-900 border border-rose-300">
-                            Trashed
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-900 border border-emerald-300">
-                            Healthy Stock
-                          </span>
-                        )}
-                      </td>
+                      {/* LOW STOCK BADGE: Only shown when grouped by item model */}
+                      {group.isLowStock ? (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-950 border border-amber-400 shadow-2xs">
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-700" />
+                          <span>Low Stock (Total {group.totalQuantity} &lt; {group.minThreshold})</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-900 border border-emerald-300">
+                          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
+                          <span>Healthy Stock</span>
+                        </span>
+                      )}
+                    </div>
+                  </div>
 
-                      <td className="py-3 px-4">
-                        {item.itemType === 'asset' ? (
-                          <div className="text-[11px]">
-                            <span className="text-slate-600 font-medium">Engaged: </span>
-                            <span className="font-semibold text-slate-800 font-mono">
-                              {hoursEngaged > 0 ? `${hoursEngaged} hrs` : 'Idle / Fresh'}
-                            </span>
-                            {item.engagementStatus === 'engaged' && (
-                              <span className="block text-[10px] text-amber-800 font-bold">Active in Line</span>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-slate-600 text-[11px] font-medium">—</span>
-                        )}
-                      </td>
-
-                      <td className="py-3 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            title="Inspect Details & Custom Fields"
-                            onClick={() => setSelectedItemDetail(item)}
-                            className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition cursor-pointer"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-
-                          {(currentRole === 'admin' || currentRole === 'super_manager' || currentRole === 'manager') && (
-                            <>
-                              <button
-                                title="Edit Record"
-                                onClick={() => setEditingItem(item)}
-                                className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition cursor-pointer"
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </button>
-
-                              <button
-                                title="Move / Transfer between Departments or Branches"
-                                onClick={() => onOpenTransfer && onOpenTransfer(item)}
-                                className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition cursor-pointer"
-                              >
-                                <ArrowRightLeft className="w-4 h-4" />
-                              </button>
-
-                              {item.itemType === 'asset' && (
-                                <button
-                                  title="Send to Vendor for Repair & Log Engagement Time"
-                                  onClick={() => onOpenRepair && onOpenRepair(item)}
-                                  className="p-1.5 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition cursor-pointer"
-                                >
-                                  <Wrench className="w-4 h-4" />
-                                </button>
-                              )}
-
-                              {(currentRole === 'admin' || currentRole === 'super_manager') && (
-                                <button
-                                  title="Delete Inventory Record"
-                                  onClick={() => setDeleteItemModal({ isOpen: true, item })}
-                                  className="p-1.5 text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                  {/* Group Items Table (Collapsible) */}
+                  {!isCollapsed && (
+                    <div className="border-t border-slate-200/80 overflow-x-auto">
+                      <table className="w-full text-left text-xs text-slate-800">
+                        <thead className="bg-slate-50 text-slate-700 uppercase text-[10px] font-bold border-b border-slate-200 tracking-wider">
+                          <tr>
+                            <th className="py-2.5 px-4">Code / SKU</th>
+                            <th className="py-2.5 px-4">Item Name</th>
+                            <th className="py-2.5 px-4">Category</th>
+                            <th className="py-2.5 px-4">Location / Sublocation</th>
+                            <th className="py-2.5 px-4">Available Qty & UOM</th>
+                            <th className="py-2.5 px-4">Item Status</th>
+                            <th className="py-2.5 px-4">Engagement</th>
+                            <th className="py-2.5 px-4 text-right">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                          {group.items.map((item) => renderItemRow(item))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
         </div>
-      </div>
+      ) : (
+        /* Flat Items Table View */
+        <div className="bg-white rounded-xl border border-slate-200/90 shadow-2xs overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs text-slate-800">
+              <thead className="bg-slate-100 text-slate-700 uppercase text-[10px] font-bold border-b border-slate-200 tracking-wider">
+                <tr>
+                  <th className="py-2.5 px-4">Code / SKU</th>
+                  <th className="py-2.5 px-4">Name & Model</th>
+                  <th className="py-2.5 px-4">Category</th>
+                  <th className="py-2.5 px-4">Location / Sublocation</th>
+                  <th className="py-2.5 px-4">Available Quantity & UOM</th>
+                  <th className="py-2.5 px-4">Status & Health</th>
+                  <th className="py-2.5 px-4">Engagement / Lifetime</th>
+                  <th className="py-2.5 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {loading ? (
+                  <tr>
+                    <td colSpan={8} className="py-8 text-center text-slate-600 font-medium">
+                      Loading stock records from PostgreSQL...
+                    </td>
+                  </tr>
+                ) : displayedFlatItems.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="py-12 text-center text-slate-600">
+                      <Boxes className="w-8 h-8 mx-auto text-slate-400 mb-2" />
+                      <p className="font-semibold text-slate-800">No inventory items matched your filter criteria.</p>
+                      <p className="text-xs text-slate-600 mt-1">Try resetting filters or click "+ Add Asset / Consumable".</p>
+                    </td>
+                  </tr>
+                ) : (
+                  displayedFlatItems.map((item) => renderItemRow(item))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Item Detail / Custom Fields Modal */}
       {selectedItemDetail && (

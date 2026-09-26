@@ -187,7 +187,11 @@ export interface StockLocation {
   locationId?: number | null;
   machineId?: number | null;
   quantity: number;
-  updatedAt: string;
+  updatedAt?: string;
+  branch?: Branch | null;
+  department?: Department | null;
+  location?: (LocationItem & { formattedName?: string | null }) | null;
+  machine?: Machine | null;
 }
 
 export interface InventoryItem {

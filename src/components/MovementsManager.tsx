@@ -54,7 +54,9 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
     'dept_to_dept' | 'branch_to_branch' | 'assigned_to_machine' | 'issued_to_employee' | 'trashed'
   >('dept_to_dept');
   const [quantity, setQuantity] = useState<string>('1');
-  const [toBranchId, setToBranchId] = useState<number>(currentBranchId);
+  const [toBranchId, setToBranchId] = useState<number>(() => {
+    return currentBranchId === 12 ? 13 : 12;
+  });
   const [fromStockLocId, setFromStockLocId] = useState<number | ''>('');
   const [fromDeptId, setFromDeptId] = useState<number | ''>('');
   const [fromLocationId, setFromLocationId] = useState<number | ''>('');
@@ -89,8 +91,19 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
       setPendingTransfers(pendingData || []);
       const loadedItems = invData || [];
       setItems(loadedItems);
-      setAllBranches(branchData || []);
+      const loadedBranches = branchData || [];
+      setAllBranches(loadedBranches);
       setCurrentBranchLocations(locData || []);
+
+      const eligibleDest = loadedBranches.filter((b) => b.id !== currentBranchId);
+      if (eligibleDest.length > 0) {
+        setToBranchId((prev) => {
+          if (!prev || prev === currentBranchId || !eligibleDest.some(b => b.id === prev)) {
+            return eligibleDest[0].id;
+          }
+          return prev;
+        });
+      }
 
       if (!selectedItemId && loadedItems.length > 0) {
         setSelectedItemId(loadedItems[0].id);
@@ -109,16 +122,50 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
     loadMovements();
   }, [currentBranchId]);
 
+  // Sync initialItem when opened from InventoryView
+  useEffect(() => {
+    if (initialItem) {
+      setSelectedItemId(initialItem.id);
+      setIsModalOpen(true);
+      setMovementType('branch_to_branch');
+      if (initialItem.itemType === 'asset') {
+        setQuantity('1');
+      }
+      setItems((prev) => {
+        if (!prev.some((i) => i.id === initialItem.id)) {
+          return [initialItem, ...prev];
+        }
+        return prev;
+      });
+    }
+  }, [initialItem]);
+
   // Sync source location and quantity whenever selected item changes
   const selectedItemObj = items.find((i) => i.id === selectedItemId);
 
   const availableSourceLocations = (selectedItemObj?.stockLocations || []).filter(
-    (sl) => sl.branchId === currentBranchId && sl.quantity > 0
-  );
+    (sl) => (sl.branchId === currentBranchId || !currentBranchId) && sl.quantity > 0
+  ).length > 0
+    ? (selectedItemObj?.stockLocations || []).filter(
+        (sl) => (sl.branchId === currentBranchId || !currentBranchId) && sl.quantity > 0
+      )
+    : (selectedItemObj?.stockLocations || []).filter((sl) => sl.quantity > 0);
 
   const currentSourceStock = (selectedItemObj?.stockLocations || []).find(
     (sl) => sl.id === fromStockLocId
   );
+
+  const effectiveFromBranch = currentSourceStock?.branchId || availableSourceLocations[0]?.branchId || currentBranchId;
+
+  // Keep toBranchId valid and different from effectiveFromBranch
+  useEffect(() => {
+    const eligibleDest = allBranches.filter((b) => b.id !== effectiveFromBranch);
+    if (eligibleDest.length > 0) {
+      if (!toBranchId || toBranchId === effectiveFromBranch || !eligibleDest.some(b => b.id === toBranchId)) {
+        setToBranchId(eligibleDest[0].id);
+      }
+    }
+  }, [allBranches, effectiveFromBranch, toBranchId]);
 
   const maxAvailableQuantity = currentSourceStock?.quantity ?? (selectedItemObj?.availableQuantity || 0);
 
@@ -168,10 +215,11 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
   useEffect(() => {
     async function loadBranchEntities() {
       try {
+        const branchForTarget = movementType === 'branch_to_branch' ? toBranchId : (currentSourceStock?.branchId || currentBranchId);
         const [dData, lData, mData] = await Promise.all([
-          fetchApi<Department[]>(`/api/departments?branchId=${toBranchId}`),
-          fetchApi<LocationItem[]>(`/api/locations?branchId=${toBranchId}`),
-          fetchApi<Machine[]>(`/api/machines?branchId=${toBranchId}`),
+          fetchApi<Department[]>(`/api/departments?branchId=${branchForTarget}`),
+          fetchApi<LocationItem[]>(`/api/locations?branchId=${branchForTarget}`),
+          fetchApi<Machine[]>(`/api/machines?branchId=${branchForTarget}`),
         ]);
         setTargetDepts(dData || []);
         setTargetLocations(lData || []);
@@ -181,7 +229,7 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
       }
     }
     loadBranchEntities();
-  }, [toBranchId]);
+  }, [toBranchId, movementType, currentBranchId, currentSourceStock]);
 
   const handleRecordMovement = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -204,6 +252,14 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
       return;
     }
 
+    const effectiveFromBranch = currentSourceStock?.branchId || currentBranchId;
+    const effectiveToBranch = movementType === 'branch_to_branch' ? Number(toBranchId) : effectiveFromBranch;
+
+    if (movementType === 'branch_to_branch' && (!effectiveToBranch || Number(effectiveToBranch) === Number(effectiveFromBranch))) {
+      showToast('Destination branch must be different from current branch for inter-branch transfer', 'error');
+      return;
+    }
+
     try {
       setSubmitting(true);
       await fetchApi('/api/movements', {
@@ -213,8 +269,8 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
           quantity: qtyNum,
           uom: selectedItemObj?.uom || 'unit',
           movementType,
-          fromBranchId: currentBranchId,
-          toBranchId: movementType === 'branch_to_branch' ? Number(toBranchId) : currentBranchId,
+          fromBranchId: effectiveFromBranch,
+          toBranchId: effectiveToBranch,
           fromDepartmentId: fromDeptId ? Number(fromDeptId) : null,
           fromLocationId: fromLocationId ? Number(fromLocationId) : null,
           toDepartmentId: movementType === 'branch_to_branch' ? null : toDeptId ? Number(toDeptId) : null,
@@ -499,21 +555,14 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                         <div className="flex flex-col gap-1 text-xs">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="font-semibold text-slate-800">
-                              {mov.movementType === 'branch_to_branch'
-                                ? `${mov.fromBranch?.name || `Branch #${mov.fromBranchId}`}${
-                                    mov.fromDepartment ? ` (${mov.fromDepartment.name})` : ''
-                                  }`
-                                : mov.fromDepartment?.name || mov.fromBranch?.name || 'Central Store'}
+                              {mov.fromBranch?.name || `Branch #${mov.fromBranchId}`}
+                              {mov.fromDepartment ? ` (${mov.fromDepartment.name})` : ''}
                             </span>
                             <ArrowRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                             <span className="font-bold text-blue-900">
-                              {mov.movementType === 'branch_to_branch'
-                                ? mov.toDepartment
-                                  ? `${mov.toBranch?.name || `Branch #${mov.toBranchId}`} (${mov.toDepartment.name})`
-                                  : isPending
-                                  ? `${mov.toBranch?.name || `Branch #${mov.toBranchId}`} (Awaiting Acceptance)`
-                                  : mov.toBranch?.name || `Branch #${mov.toBranchId}`
-                                : mov.toDepartment?.name || mov.toBranch?.name || 'Assigned Location'}
+                              {mov.toBranch?.name || `Branch #${mov.toBranchId}`}
+                              {mov.toDepartment ? ` (${mov.toDepartment.name})` : mov.toMachine ? ` (${mov.toMachine.name})` : ''}
+                              {isPending ? ' (Awaiting Acceptance)' : ''}
                             </span>
                           </div>
                           {(mov.fromLocation || mov.toLocation || mov.toMachine) && (
@@ -635,8 +684,17 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                   tabIndex={1}
                   title="Select destination department for received inventory"
                   value={allocDeptId}
-                  onChange={(e) => setAllocDeptId(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
+                  onChange={(e) => {
+                    const newDeptId = e.target.value ? Number(e.target.value) : '';
+                    setAllocDeptId(newDeptId);
+                    if (newDeptId) {
+                      const deptLocs = currentBranchLocations.filter((l) => l.departmentId === Number(newDeptId));
+                      setAllocLocationId(deptLocs[0]?.id || '');
+                    } else {
+                      setAllocLocationId('');
+                    }
+                  }}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white font-medium"
                 >
                   <option value="">-- Choose Receiving Department --</option>
                   {departments.map((d) => (
@@ -649,21 +707,33 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
 
               <div>
                 <label className="block font-bold text-slate-700 mb-1">
-                  Storage Location / Bin <span className="text-slate-400 font-normal">(Optional)</span>
+                  Storage Location / Bin <span className="text-slate-400 font-normal">(Filtered by Department)</span>
                 </label>
                 <select
                   tabIndex={2}
-                  title="Specific shelf, bin, or room within department"
+                  title="Specific shelf, bin, or room within selected department"
                   value={allocLocationId}
                   onChange={(e) => setAllocLocationId(e.target.value ? Number(e.target.value) : '')}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white font-medium"
                 >
                   <option value="">-- General Storage --</option>
-                  {currentBranchLocations.map((l) => (
-                    <option key={l.id} value={l.id}>
-                      {l.name} {l.parentLocationId ? '(Sublocation)' : ''}
-                    </option>
-                  ))}
+                  {allocDeptId ? (
+                    currentBranchLocations
+                      .filter((l) => l.departmentId === Number(allocDeptId))
+                      .map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.name} {l.parentLocationId ? '(Sublocation)' : ''}
+                        </option>
+                      ))
+                  ) : (
+                    currentBranchLocations
+                      .filter((l) => !l.departmentId)
+                      .map((l) => (
+                        <option key={l.id} value={l.id}>
+                          {l.name} {l.parentLocationId ? '(Sublocation)' : ''}
+                        </option>
+                      ))
+                  )}
                 </select>
               </div>
 
@@ -757,7 +827,13 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                     type="button"
                     tabIndex={2}
                     title="Dispatch stock to another branch with manager acceptance protocol"
-                    onClick={() => setMovementType('branch_to_branch')}
+                    onClick={() => {
+                      setMovementType('branch_to_branch');
+                      const eligibleDest = allBranches.filter((b) => b.id !== currentBranchId);
+                      if (eligibleDest.length > 0 && (!toBranchId || toBranchId === currentBranchId)) {
+                        setToBranchId(eligibleDest[0].id);
+                      }
+                    }}
                     className={`py-2 px-3 rounded-lg font-bold border transition cursor-pointer ${
                       movementType === 'branch_to_branch'
                         ? 'bg-gradient-to-r from-[#FF8C00] to-[#FF4500] text-white border-transparent shadow-xs'
@@ -886,7 +962,7 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                       className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white font-medium"
                     >
                       {allBranches
-                        .filter((b) => b.id !== currentBranchId)
+                        .filter((b) => b.id !== effectiveFromBranch)
                         .map((b) => (
                           <option key={b.id} value={b.id}>
                             {b.name} ({b.code})
@@ -901,8 +977,17 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                       tabIndex={6}
                       title="Target receiving department in current branch"
                       value={toDeptId}
-                      onChange={(e) => setToDeptId(e.target.value ? Number(e.target.value) : '')}
-                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
+                      onChange={(e) => {
+                        const newDeptId = e.target.value ? Number(e.target.value) : '';
+                        setToDeptId(newDeptId);
+                        if (newDeptId) {
+                          const deptLocs = targetLocations.filter((l) => l.departmentId === Number(newDeptId));
+                          setToLocationId(deptLocs[0]?.id || '');
+                        } else {
+                          setToLocationId('');
+                        }
+                      }}
+                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white font-medium"
                     >
                       <option value="">-- Direct Store / General --</option>
                       {departments.map((d) => (
@@ -930,20 +1015,34 @@ export const MovementsManager: React.FC<MovementsManagerProps> = ({ initialItem 
                 /* Department, Location and Machine Picker for Intra-Branch */
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 mb-1">Target Storage Sublocation</label>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Target Storage Sublocation <span className="text-slate-400 font-normal">(Filtered by Dept)</span>
+                    </label>
                     <select
                       tabIndex={7}
                       title="Specific storage rack, shelf, or bin"
                       value={toLocationId}
                       onChange={(e) => setToLocationId(e.target.value ? Number(e.target.value) : '')}
-                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white"
+                      className="w-full px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-[#FF8C00] focus:border-[#FF8C00] bg-white font-medium"
                     >
                       <option value="">-- General Storage Shelf --</option>
-                      {targetLocations.map((l) => (
-                        <option key={l.id} value={l.id}>
-                          {l.name} {l.parentLocationId ? '(Sublocation)' : ''}
-                        </option>
-                      ))}
+                      {toDeptId ? (
+                        targetLocations
+                          .filter((l) => l.departmentId === Number(toDeptId))
+                          .map((l) => (
+                            <option key={l.id} value={l.id}>
+                              {l.name} {l.parentLocationId ? '(Sublocation)' : ''}
+                            </option>
+                          ))
+                      ) : (
+                        targetLocations
+                          .filter((l) => !l.departmentId)
+                          .map((l) => (
+                            <option key={l.id} value={l.id}>
+                              {l.name} {l.parentLocationId ? '(Sublocation)' : ''}
+                            </option>
+                          ))
+                      )}
                     </select>
                   </div>
 
